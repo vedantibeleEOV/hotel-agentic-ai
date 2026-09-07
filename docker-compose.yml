@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: hotel_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-hotel_operations_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hotel_operations_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Local LLM Container (Ollama / OpenAI Compatible API)
+  llm:
+    image: ollama/ollama:latest
+    container_name: hotel_llm
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # Hotel Operations AI FastAPI Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hotel_app
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=${PROJECT_NAME:-Hotel Operations AI}
+      - VERSION=${VERSION:-0.1.0}
+      - DEBUG=${DEBUG:-True}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-hotel_operations_db}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://llm:11434/v1}
+      - LLM_MODEL=${LLM_MODEL:-llama3.2}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-ollama}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      llm:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  ollama_data:

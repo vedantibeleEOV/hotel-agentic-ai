@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from app.models.enums import StaffRole
+from app.models.enums import MaintenanceSkill, StaffRole
 
 
 class Staff(BaseModel):
@@ -17,3 +17,5 @@ class Staff(BaseModel):
     assigned_floor: Optional[int] = Field(default=None, ge=0)
     is_available: bool = True
     active_task_count: int = Field(default=0, ge=0)
+    skills: list[MaintenanceSkill] = Field(default_factory=list)
+

@@ -67,7 +67,7 @@ async def process_checkout_event(event: CheckoutEvent):
         housekeeping_result = housekeeping_agent.assign_cleaning_task(room_readiness_result)
     except ValueError as e:
         err_msg = str(e)
-        if "must be in OCCUPIED status" in err_msg or "must be in DIRTY status" in err_msg:
+        if "must be in OCCUPIED" in err_msg or "must be in DIRTY" in err_msg or "must be in OCCUPIED or DIRTY" in err_msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=err_msg

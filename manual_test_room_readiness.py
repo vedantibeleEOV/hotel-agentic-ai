@@ -50,9 +50,9 @@ except ValueError as e:
 print()
 
 print("=" * 60)
-print("TEST D — Room not OCCUPIED (expect ValueError)")
+print("TEST D — Room not OCCUPIED or DIRTY (expect ValueError)")
 print("=" * 60)
-repo_fresh.update_room_status(room_id=1, new_status=RoomStatus.DIRTY)
+repo_fresh.update_room_status(room_id=1, new_status=RoomStatus.CLEANING)
 event_d = CheckoutEvent(
     property_id=1,
     room_id=1,

@@ -18,9 +18,9 @@ class RoomReadinessAgent:
 
         # Accept RoomStatus enum or string value
         room_status_str = room.status.value if hasattr(room.status, "value") else str(room.status)
-        if room_status_str != RoomStatus.OCCUPIED.value:
+        if room_status_str not in (RoomStatus.OCCUPIED.value, RoomStatus.DIRTY.value):
             raise ValueError(
-                f"Room {event.room_id} must be in OCCUPIED status to process checkout, but is {room_status_str}."
+                f"Room {event.room_id} must be in OCCUPIED or DIRTY status to process turnaround, but is {room_status_str}."
             )
 
         next_reservation = self.repository.get_next_reservation_for_room(

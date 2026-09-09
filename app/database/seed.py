@@ -139,6 +139,14 @@ def seed_db() -> dict:
                 "is_available": True,
                 "active_task_count": 0,
             },
+            {
+                "id": 302,
+                "name": "Suresh Pawar",
+                "role": "MAINTENANCE",
+                "assigned_floor": 3,
+                "is_available": True,
+                "active_task_count": 0,
+            },
         ]
         for item in staff_data:
             existing = session.get(StaffEntity, item["id"])

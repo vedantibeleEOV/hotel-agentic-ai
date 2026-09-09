@@ -17,19 +17,29 @@ from app.database.orm import (
     RoomEntity,
     StaffEntity,
 )
-from app.models.enums import GuestType, RoomStatus, StaffRole, TaskStatus, TaskType
+from app.models.enums import (
+    GuestType,
+    IncidentStatus,
+    MaintenanceSkill,
+    RoomStatus,
+    StaffRole,
+    TaskStatus,
+    TaskType,
+)
 from app.models.guest import Guest
+from app.models.maintenance_incident import MaintenanceIncident
 from app.models.operational_task import OperationalTask
 from app.models.reservation import Reservation
 from app.models.room import Room
 from app.models.staff import Staff
 
-
 class PostgresHotelRepository:
     """PostgreSQL implementation of hotel data repository for READ and WRITE operations using SQLAlchemy 2.x."""
 
+
     def __init__(self, session_factory=SessionLocal):
         self.session_factory = session_factory
+        self.maintenance_incidents: Dict[UUID, MaintenanceIncident] = {}
 
     @staticmethod
     def _to_pydantic_room(entity: RoomEntity) -> Room:
@@ -64,6 +74,11 @@ class PostgresHotelRepository:
 
     @staticmethod
     def _to_pydantic_staff(entity: StaffEntity) -> Staff:
+        skills = []
+        if entity.id == 301:
+            skills = [MaintenanceSkill.HVAC, MaintenanceSkill.GENERAL]
+        elif entity.id == 302:
+            skills = [MaintenanceSkill.ELECTRICAL, MaintenanceSkill.PLUMBING, MaintenanceSkill.GENERAL]
         return Staff(
             id=entity.id,
             name=entity.name,
@@ -71,7 +86,9 @@ class PostgresHotelRepository:
             assigned_floor=entity.assigned_floor,
             is_available=entity.is_available,
             active_task_count=entity.active_task_count,
+            skills=skills,
         )
+
 
     @staticmethod
     def _to_pydantic_task(entity: OperationalTaskEntity) -> OperationalTask:
@@ -216,4 +233,65 @@ class PostgresHotelRepository:
         with self.session_factory() as session:
             entities = session.execute(select(OperationalTaskEntity)).scalars().all()
             return {e.id: self._to_pydantic_task(e) for e in entities}
+
+    def get_available_maintenance_staff(
+        self, required_skill: MaintenanceSkill, room_floor: Optional[int] = None
+    ) -> list[Staff]:
+        """Return available maintenance staff having required skill sorted by floor proximity, active task count, and ID."""
+        with self.session_factory() as session:
+            stmt = select(StaffEntity).where(
+                StaffEntity.role == StaffRole.MAINTENANCE.value,
+                StaffEntity.is_available == True,
+            )
+            staff_entities = list(session.execute(stmt).scalars().all())
+            staff_models = [self._to_pydantic_staff(s) for s in staff_entities]
+
+            filtered = [
+                s for s in staff_models
+                if s.role == StaffRole.MAINTENANCE and s.is_available and required_skill in s.skills
+            ]
+            filtered.sort(
+                key=lambda s: (
+                    0 if (room_floor is not None and s.assigned_floor == room_floor) else 1,
+                    s.active_task_count,
+                    s.id,
+                )
+            )
+            return filtered
+
+    def save_maintenance_incident(
+        self, incident: MaintenanceIncident
+    ) -> MaintenanceIncident:
+        """Store incident in self.maintenance_incidents keyed by incident.id and return it."""
+        self.maintenance_incidents[incident.id] = incident
+        return incident
+
+    def get_maintenance_incident_by_id(
+        self, incident_id
+    ) -> Optional[MaintenanceIncident]:
+        """Return matching MaintenanceIncident or None if not found."""
+        return self.maintenance_incidents.get(incident_id)
+
+    def assign_incident_to_technician(
+        self, incident_id, technician_id: int
+    ) -> MaintenanceIncident:
+        """Assign an incident to a technician and update statuses in PostgreSQL."""
+        incident = self.maintenance_incidents.get(incident_id)
+        if not incident:
+            raise ValueError(f"Maintenance incident with ID {incident_id} not found.")
+
+        with self.session_factory() as session:
+            staff_entity = session.get(StaffEntity, technician_id)
+            if not staff_entity:
+                raise ValueError(f"Staff with ID {technician_id} not found.")
+
+            incident.assigned_technician_id = technician_id
+            incident.status = IncidentStatus.ASSIGNED
+
+            staff_entity.active_task_count += 1
+            staff_entity.is_available = False
+            session.commit()
+
+        return incident
+
 

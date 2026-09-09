@@ -130,6 +130,26 @@ def test_api_checkout_invalid_room_status_conflict():
         "checkout_time": "2026-08-29T10:00:00"
     })
     assert response.status_code == 409
-    assert "must be in OCCUPIED status" in response.json()["detail"]
+    assert "must be in OCCUPIED or DIRTY status" in response.json()["detail"]
+
+
+def test_api_checkout_dirty_room_succeeds():
+    client.post("/api/reset")
+    # Manually set room 2 status to DIRTY
+    client.put("/api/rooms/2/status?new_status=DIRTY")
+
+    # Calling checkout event for room 2 (which is DIRTY) should succeed!
+    response = client.post("/api/events/checkout", json={
+        "property_id": 1,
+        "room_id": 2,
+        "reservation_id": 5002,
+        "checkout_time": "2026-08-29T10:00:00"
+    })
+    assert response.status_code == 202
+    data = response.json()
+    assert data["message"] == "Checkout event accepted and routed"
+    assert data["housekeeping"]["new_room_status"] == "CLEANING"
+    assert data["housekeeping"]["status"] == "HOUSEKEEPING_ASSIGNED"
+
 
 

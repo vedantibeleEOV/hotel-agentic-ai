@@ -12,8 +12,16 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 
-from app.models.enums import GuestType, RoomStatus, StaffRole, TaskStatus
+from app.models.enums import (
+    GuestType,
+    IncidentStatus,
+    MaintenanceSkill,
+    RoomStatus,
+    StaffRole,
+    TaskStatus,
+)
 from app.models.guest import Guest
+from app.models.maintenance_incident import MaintenanceIncident
 from app.models.operational_task import OperationalTask
 from app.models.reservation import Reservation
 from app.models.room import Room
@@ -21,7 +29,7 @@ from app.models.staff import Staff
 
 
 class MockHotelRepository:
-    """Mock in-memory data repository for rooms, guests, reservations, staff, and tasks."""
+    """Mock in-memory data repository for rooms, guests, reservations, staff, tasks, and maintenance incidents."""
 
     def __init__(self):
         self.rooms: Dict[int, Room] = {
@@ -109,10 +117,26 @@ class MockHotelRepository:
                 assigned_floor=4,
                 is_available=True,
                 active_task_count=0,
+                skills=[MaintenanceSkill.HVAC, MaintenanceSkill.GENERAL],
             ),
+            302: Staff(
+                id=302,
+                name="Suresh Pawar",
+                role=StaffRole.MAINTENANCE,
+                assigned_floor=3,
+                is_available=True,
+                active_task_count=1,
+                skills=[
+                    MaintenanceSkill.ELECTRICAL,
+                    MaintenanceSkill.PLUMBING,
+                    MaintenanceSkill.GENERAL,
+                ],
+            ),
+
         }
 
         self.operational_tasks: Dict[UUID, OperationalTask] = {}
+        self.maintenance_incidents: Dict[UUID, MaintenanceIncident] = {}
 
     def get_room_by_id(self, room_id: int) -> Optional[Room]:
         """Return matching Room object or None for unknown ID."""
@@ -197,3 +221,57 @@ class MockHotelRepository:
     def get_operational_task_by_id(self, task_id: UUID) -> Optional[OperationalTask]:
         """Return matching OperationalTask or None if not found."""
         return self.operational_tasks.get(task_id)
+
+    def get_available_maintenance_staff(
+        self, required_skill: MaintenanceSkill, room_floor: Optional[int] = None
+    ) -> list[Staff]:
+        """Return available maintenance staff having the required skill sorted by floor proximity, active task count, and ID."""
+        filtered = [
+            s
+            for s in self.staff.values()
+            if s.role == StaffRole.MAINTENANCE
+            and s.is_available
+            and required_skill in s.skills
+        ]
+        filtered.sort(
+            key=lambda s: (
+                0 if (room_floor is not None and s.assigned_floor == room_floor) else 1,
+                s.active_task_count,
+                s.id,
+            )
+        )
+        return filtered
+
+    def save_maintenance_incident(
+        self, incident: MaintenanceIncident
+    ) -> MaintenanceIncident:
+        """Store incident in self.maintenance_incidents keyed by incident.id and return it."""
+        self.maintenance_incidents[incident.id] = incident
+        return incident
+
+    def get_maintenance_incident_by_id(
+        self, incident_id
+    ) -> Optional[MaintenanceIncident]:
+        """Return matching MaintenanceIncident or None if not found."""
+        return self.maintenance_incidents.get(incident_id)
+
+    def assign_incident_to_technician(
+        self, incident_id, technician_id: int
+    ) -> MaintenanceIncident:
+        """Assign an incident to a technician and update statuses."""
+        incident = self.maintenance_incidents.get(incident_id)
+        if not incident:
+            raise ValueError(f"Maintenance incident with ID {incident_id} not found.")
+
+        technician = self.staff.get(technician_id)
+        if not technician:
+            raise ValueError(f"Staff with ID {technician_id} not found.")
+
+        incident.assigned_technician_id = technician_id
+        incident.status = IncidentStatus.ASSIGNED
+
+        technician.active_task_count += 1
+        technician.is_available = False
+
+        return incident
+

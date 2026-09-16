@@ -19,3 +19,4 @@ class CheckoutEvent(BaseModel):
     room_id: int = Field(..., gt=0)
     reservation_id: int = Field(..., gt=0)
     checkout_time: datetime
+

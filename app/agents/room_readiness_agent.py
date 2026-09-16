@@ -2,12 +2,11 @@ from typing import Any, Union
 from app.models.checkout_event import CheckoutEvent
 from app.models.enums import GuestType, RoomStatus
 from app.models.room_readiness_result import RoomReadinessResult
-from app.repositories.mock_hotel_repository import MockHotelRepository
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 class RoomReadinessAgent:
-    def __init__(self, repository: Union[MockHotelRepository, PostgresHotelRepository, Any]):
+    def __init__(self, repository: Union[PostgresHotelRepository, Any]):
         self.repository = repository
         self.activity_logs = []
 

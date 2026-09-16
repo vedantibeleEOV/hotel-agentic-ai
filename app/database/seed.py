@@ -22,6 +22,10 @@ def seed_db() -> dict:
     skipped_counts = {"rooms": 0, "guests": 0, "reservations": 0, "staff": 0}
 
     try:
+        # Clear operational tasks on reset
+        session.execute(text("DELETE FROM operational_tasks;"))
+        session.commit()
+
         # 1. Rooms Seed Data
         rooms_data = [
             {
@@ -112,6 +116,7 @@ def seed_db() -> dict:
                 "name": "Priya Deshmukh",
                 "role": "HOUSEKEEPING",
                 "assigned_floor": 4,
+                "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
             },
@@ -120,6 +125,7 @@ def seed_db() -> dict:
                 "name": "Neha Patil",
                 "role": "HOUSEKEEPING",
                 "assigned_floor": 4,
+                "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
             },
@@ -128,6 +134,7 @@ def seed_db() -> dict:
                 "name": "Sunita More",
                 "role": "HOUSEKEEPING",
                 "assigned_floor": 3,
+                "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
             },
@@ -136,6 +143,7 @@ def seed_db() -> dict:
                 "name": "Rakesh Jadhav",
                 "role": "MAINTENANCE",
                 "assigned_floor": 4,
+                "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
             },
@@ -144,6 +152,7 @@ def seed_db() -> dict:
                 "name": "Suresh Pawar",
                 "role": "MAINTENANCE",
                 "assigned_floor": 3,
+                "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
             },
@@ -156,6 +165,8 @@ def seed_db() -> dict:
             else:
                 existing.is_available = item["is_available"]
                 existing.active_task_count = item["active_task_count"]
+                existing.assigned_floor = item["assigned_floor"]
+                existing.assigned_room_id = item["assigned_room_id"]
                 skipped_counts["staff"] += 1
 
         session.commit()

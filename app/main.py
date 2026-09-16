@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from app.api.checkout import housekeeping_agent, repository, router as checkout_router
 from app.api.maintenance import maintenance_agent, router as maintenance_router
+from app.api.tasks import router as tasks_router
 from app.api.v1.router import api_router
 from app.config import settings
 from app.database.connection import engine
@@ -53,7 +54,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Failed to initialize repositories or agents")
 
     # Step d: Registering API routers
-    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue)", flush=True)
+    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue, /api/tasks)", flush=True)
 
     # Step e: Application ready
     print(f"Application ready to accept requests on http://{settings.HOST}:{settings.PORT}", flush=True)
@@ -98,6 +99,13 @@ app.include_router(
     maintenance_router,
     prefix="/api",
     tags=["Maintenance Events"]
+)
+
+# Mount Tasks router
+app.include_router(
+    tasks_router,
+    prefix="/api",
+    tags=["Tasks"]
 )
 
 

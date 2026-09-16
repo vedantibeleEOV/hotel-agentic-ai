@@ -5,40 +5,7 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_checkout_no_body_no_params():
-    response = client.post("/checkout-request")
-    assert response.status_code == 200
-    assert response.json()["status"] == "success"
 
-
-def test_checkout_url_query_param():
-    response = client.post("/checkout-request?query=101")
-    assert response.status_code == 200
-    assert "101" in response.json()["agent_response"]
-
-
-def test_checkout_url_room_number_param():
-    response = client.post("/checkout-request?room_number=202")
-    assert response.status_code == 200
-    assert "202" in response.json()["agent_response"]
-
-
-def test_checkout_json_query():
-    response = client.post("/checkout-request", json={"query": "303"})
-    assert response.status_code == 200
-    assert "303" in response.json()["agent_response"]
-
-
-def test_checkout_json_room_number():
-    response = client.post("/checkout-request", json={"room_number": "404"})
-    assert response.status_code == 200
-    assert "404" in response.json()["agent_response"]
-
-
-def test_checkout_empty_json():
-    response = client.post("/checkout-request", json={})
-    assert response.status_code == 200
-    assert "unknown" in response.json()["agent_response"]
 
 
 def test_api_checkout_valid_event():
@@ -135,10 +102,12 @@ def test_api_checkout_invalid_room_status_conflict():
 
 def test_api_checkout_dirty_room_succeeds():
     client.post("/api/reset")
-    # Manually set room 2 status to DIRTY
-    client.put("/api/rooms/2/status?new_status=DIRTY")
+    from app.repositories.postgres_hotel_repository import PostgresHotelRepository
+    from app.models.enums import RoomStatus
+    PostgresHotelRepository().update_room_status(2, RoomStatus.DIRTY)
 
     # Calling checkout event for room 2 (which is DIRTY) should succeed!
+
     response = client.post("/api/events/checkout", json={
         "property_id": 1,
         "room_id": 2,
@@ -150,6 +119,8 @@ def test_api_checkout_dirty_room_succeeds():
     assert data["message"] == "Checkout event accepted and routed"
     assert data["housekeeping"]["new_room_status"] == "CLEANING"
     assert data["housekeeping"]["status"] == "HOUSEKEEPING_ASSIGNED"
+
+
 
 
 

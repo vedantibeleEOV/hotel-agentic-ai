@@ -91,6 +91,7 @@ class MockHotelRepository:
                 name="Priya Deshmukh",
                 role=StaffRole.HOUSEKEEPING,
                 assigned_floor=4,
+                assigned_room_id=1,
                 is_available=True,
                 active_task_count=1,
             ),
@@ -99,6 +100,7 @@ class MockHotelRepository:
                 name="Neha Patil",
                 role=StaffRole.HOUSEKEEPING,
                 assigned_floor=4,
+                assigned_room_id=None,
                 is_available=True,
                 active_task_count=0,
             ),
@@ -107,6 +109,7 @@ class MockHotelRepository:
                 name="Sunita More",
                 role=StaffRole.HOUSEKEEPING,
                 assigned_floor=3,
+                assigned_room_id=None,
                 is_available=True,
                 active_task_count=0,
             ),
@@ -115,6 +118,7 @@ class MockHotelRepository:
                 name="Rakesh Jadhav",
                 role=StaffRole.MAINTENANCE,
                 assigned_floor=4,
+                assigned_room_id=None,
                 is_available=True,
                 active_task_count=0,
                 skills=[MaintenanceSkill.HVAC, MaintenanceSkill.GENERAL],
@@ -124,6 +128,7 @@ class MockHotelRepository:
                 name="Suresh Pawar",
                 role=StaffRole.MAINTENANCE,
                 assigned_floor=3,
+                assigned_room_id=None,
                 is_available=True,
                 active_task_count=1,
                 skills=[
@@ -216,6 +221,7 @@ class MockHotelRepository:
         task.status = TaskStatus.ASSIGNED
         staff.active_task_count += 1
         staff.is_available = False
+        staff.assigned_room_id = task.room_id
         return task
 
     def get_operational_task_by_id(self, task_id: UUID) -> Optional[OperationalTask]:
@@ -270,8 +276,69 @@ class MockHotelRepository:
         incident.assigned_technician_id = technician_id
         incident.status = IncidentStatus.ASSIGNED
 
-        technician.active_task_count += 1
         technician.is_available = False
+        technician.assigned_room_id = incident.room_id
 
         return incident
+
+    def complete_task(self, task_id: UUID) -> OperationalTask:
+        """Mark an operational task as completed, release assigned staff, and update room status."""
+        task = self.operational_tasks.get(task_id)
+        if not task:
+            raise ValueError(f"Task with ID {task_id} not found.")
+
+        if task.status == TaskStatus.COMPLETED or task.status == TaskStatus.COMPLETED.value:
+            raise ValueError(f"Task {task_id} is already completed.")
+
+        task.status = TaskStatus.COMPLETED
+
+        # Update associated maintenance incident if one exists
+        for inc in self.maintenance_incidents.values():
+            if inc.operational_task_id == task_id or (
+                inc.room_id == task.room_id
+                and inc.assigned_technician_id == task.assigned_staff_id
+                and inc.status == IncidentStatus.ASSIGNED
+            ):
+                inc.status = IncidentStatus.RESOLVED
+
+        # Release assigned staff
+        if task.assigned_staff_id:
+            staff = self.staff.get(task.assigned_staff_id)
+            if staff:
+                remaining_staff_tasks = [
+                    t for t in self.operational_tasks.values()
+                    if t.assigned_staff_id == staff.id
+                    and t.id != task_id
+                    and t.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+                ]
+                staff.active_task_count = len(remaining_staff_tasks)
+
+                if not remaining_staff_tasks:
+                    staff.is_available = True
+                    staff.assigned_room_id = None
+                else:
+                    staff.assigned_room_id = remaining_staff_tasks[0].room_id
+
+        # Update room status if no other active tasks for this room
+        room = self.rooms.get(task.room_id)
+        if room:
+            remaining_room_tasks = [
+                t for t in self.operational_tasks.values()
+                if t.room_id == task.room_id
+                and t.id != task_id
+                and t.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+            ]
+
+            if not remaining_room_tasks:
+                room.status = RoomStatus.READY
+            else:
+                has_maintenance = any(
+                    t.task_type == TaskType.ROOM_MAINTENANCE for t in remaining_room_tasks
+                )
+                if has_maintenance:
+                    room.status = RoomStatus.MAINTENANCE
+                else:
+                    room.status = RoomStatus.CLEANING
+
+        return task
 

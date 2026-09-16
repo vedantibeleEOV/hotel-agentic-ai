@@ -84,6 +84,7 @@ class PostgresHotelRepository:
             name=entity.name,
             role=StaffRole(entity.role) if entity.role else StaffRole.HOUSEKEEPING,
             assigned_floor=entity.assigned_floor,
+            assigned_room_id=entity.assigned_room_id,
             is_available=entity.is_available,
             active_task_count=entity.active_task_count,
             skills=skills,
@@ -116,7 +117,14 @@ class PostgresHotelRepository:
             entity = session.get(GuestEntity, guest_id)
             return self._to_pydantic_guest(entity) if entity else None
 
+    def get_staff_by_id(self, staff_id: int) -> Optional[Staff]:
+        """Read a staff member from PostgreSQL by ID and return Pydantic Staff model."""
+        with self.session_factory() as session:
+            entity = session.get(StaffEntity, staff_id)
+            return self._to_pydantic_staff(entity) if entity else None
+
     def get_reservation_by_id(self, reservation_id: int) -> Optional[Reservation]:
+
         """Read a reservation from PostgreSQL by ID and return Pydantic Reservation model."""
         with self.session_factory() as session:
             entity = session.get(ReservationEntity, reservation_id)
@@ -210,6 +218,7 @@ class PostgresHotelRepository:
             task_entity.status = TaskStatus.ASSIGNED.value
             staff_entity.active_task_count += 1
             staff_entity.is_available = False
+            staff_entity.assigned_room_id = task_entity.room_id
             session.commit()
             return self._to_pydantic_task(task_entity)
 
@@ -288,10 +297,80 @@ class PostgresHotelRepository:
             incident.assigned_technician_id = technician_id
             incident.status = IncidentStatus.ASSIGNED
 
-            staff_entity.active_task_count += 1
             staff_entity.is_available = False
+            staff_entity.assigned_room_id = incident.room_id
             session.commit()
 
         return incident
+
+    def complete_task(self, task_id: UUID) -> OperationalTask:
+        """Mark an operational task as completed, release assigned staff, and update room status."""
+        with self.session_factory() as session:
+            task_entity = session.get(OperationalTaskEntity, task_id)
+            if not task_entity:
+                raise ValueError(f"Task with ID {task_id} not found.")
+
+            if task_entity.status == TaskStatus.COMPLETED.value:
+                raise ValueError(f"Task {task_id} is already completed.")
+
+            task_entity.status = TaskStatus.COMPLETED.value
+
+            # Update associated maintenance incident if one exists
+            for inc in self.maintenance_incidents.values():
+                if inc.operational_task_id == task_id or (
+                    inc.room_id == task_entity.room_id
+                    and inc.assigned_technician_id == task_entity.assigned_staff_id
+                    and inc.status == IncidentStatus.ASSIGNED
+                ):
+                    inc.status = IncidentStatus.RESOLVED
+
+            # Release assigned staff
+            if task_entity.assigned_staff_id:
+                staff_entity = session.get(StaffEntity, task_entity.assigned_staff_id)
+                if staff_entity:
+                    # Check if this staff member has any other active tasks
+                    remaining_staff_tasks_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.assigned_staff_id == staff_entity.id,
+                        OperationalTaskEntity.id != task_id,
+                        OperationalTaskEntity.status.in_([
+                            TaskStatus.PENDING.value,
+                            TaskStatus.ASSIGNED.value,
+                            TaskStatus.IN_PROGRESS.value,
+                        ]),
+                    )
+                    remaining_staff_tasks = list(session.execute(remaining_staff_tasks_stmt).scalars().all())
+                    staff_entity.active_task_count = len(remaining_staff_tasks)
+
+                    if not remaining_staff_tasks:
+                        staff_entity.is_available = True
+                        staff_entity.assigned_room_id = None
+                    else:
+                        staff_entity.assigned_room_id = remaining_staff_tasks[0].room_id
+
+            # Update room status if no other active tasks for this room
+            room_entity = session.get(RoomEntity, task_entity.room_id)
+            if room_entity:
+                remaining_room_tasks_stmt = select(OperationalTaskEntity).where(
+                    OperationalTaskEntity.room_id == task_entity.room_id,
+                    OperationalTaskEntity.id != task_id,
+                    OperationalTaskEntity.status.in_([
+                        TaskStatus.PENDING.value,
+                        TaskStatus.ASSIGNED.value,
+                        TaskStatus.IN_PROGRESS.value,
+                    ]),
+                )
+                remaining_room_tasks = list(session.execute(remaining_room_tasks_stmt).scalars().all())
+
+                if not remaining_room_tasks:
+                    room_entity.status = RoomStatus.READY.value
+                else:
+                    has_maintenance = any(t.task_type == TaskType.ROOM_MAINTENANCE.value for t in remaining_room_tasks)
+                    if has_maintenance:
+                        room_entity.status = RoomStatus.MAINTENANCE.value
+                    else:
+                        room_entity.status = RoomStatus.CLEANING.value
+
+            session.commit()
+            return self._to_pydantic_task(task_entity)
 
 

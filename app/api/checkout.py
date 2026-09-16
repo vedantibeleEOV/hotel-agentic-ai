@@ -103,28 +103,4 @@ async def reset_system_state():
 
 
 
-@router.get("/status/system", summary="Inspect system state, rooms, staff, tasks, and agent activity logs")
-async def get_system_status():
-    """Inspect current in-memory system status and agent logs."""
-    return {
-        "rooms": repository.rooms,
-        "staff": repository.staff,
-        "operational_tasks": repository.operational_tasks,
-        "activity_logs": {
-            "room_readiness_agent": room_readiness_agent.activity_logs,
-            "housekeeping_agent": housekeeping_agent.activity_logs,
-        },
-    }
 
-
-@router.put("/rooms/{room_id}/status", summary="Update or reset a room status (e.g. back to OCCUPIED)")
-async def update_room_status(room_id: int, new_status: RoomStatus):
-    """Update or reset room status in memory."""
-    try:
-        repository.update_room_status(room_id, new_status)
-        return {
-            "message": f"Room {room_id} status updated to {new_status.value}",
-            "room": repository.get_room_by_id(room_id),
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

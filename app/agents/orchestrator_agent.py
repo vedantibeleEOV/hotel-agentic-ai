@@ -1,5 +1,7 @@
 from typing import Any, Union
+from uuid import uuid4
 from app.models.checkout_event import CheckoutEvent
+from app.models.maintenance_issue_report import MaintenanceIssueReport
 from app.models.orchestration_result import OrchestrationResult
 from app.repositories.mock_hotel_repository import MockHotelRepository
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
@@ -48,6 +50,38 @@ class OperationsOrchestratorAgent:
             "workflow": "ROOM_TURNAROUND",
             "next_agent": "ROOM_READINESS_AGENT",
             "room_id": event.room_id,
+            "status": "COMPLETED",
+        }
+        self.activity_logs.append(log_entry)
+        return result
+
+    def process_maintenance_report(self, issue: MaintenanceIssueReport) -> OrchestrationResult:
+        room = self.repository.get_room_by_id(issue.room_id)
+        if not room:
+            raise ValueError(f"Room with ID {issue.room_id} not found.")
+
+        event_id = uuid4()
+        category_str = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
+
+        result = OrchestrationResult(
+            event_id=event_id,
+            workflow_name="MAINTENANCE_TICKET",
+            current_agent="OPERATIONS_ORCHESTRATOR",
+            next_agent="MAINTENANCE_AGENT",
+            room_id=issue.room_id,
+            reservation_id=None,
+            next_reservation_id=None,
+            status="ROUTED",
+            reason=f"Maintenance issue reported: {category_str}; routing to maintenance agent.",
+        )
+
+        log_entry = {
+            "agent": "OPERATIONS_ORCHESTRATOR",
+            "event_id": event_id,
+            "action": "ROUTE_EVENT",
+            "workflow": "MAINTENANCE_TICKET",
+            "next_agent": "MAINTENANCE_AGENT",
+            "room_id": issue.room_id,
             "status": "COMPLETED",
         }
         self.activity_logs.append(log_entry)

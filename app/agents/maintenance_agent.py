@@ -76,20 +76,40 @@ class MaintenanceAgent:
             raise ValueError("Reporting staff not found")
 
         # 3. Check staff role
-        if reporting_staff.role != StaffRole.HOUSEKEEPING:
-            raise ValueError("Only housekeeping staff can report maintenance issues")
+        allowed_roles = (StaffRole.HOUSEKEEPING, StaffRole.MAINTENANCE)
+        if reporting_staff.role not in allowed_roles:
+            raise ValueError("Only hotel staff (housekeeping or maintenance) can report maintenance issues")
 
         # 4. Check room current status
-        valid_statuses = (RoomStatus.CLEANING, RoomStatus.DIRTY)
-        valid_status_values = (RoomStatus.CLEANING.value, RoomStatus.DIRTY.value)
+        valid_statuses = (
+            RoomStatus.CLEANING,
+            RoomStatus.DIRTY,
+            RoomStatus.READY,
+            RoomStatus.OCCUPIED,
+            RoomStatus.MAINTENANCE,
+        )
+        valid_status_values = (
+            RoomStatus.CLEANING.value,
+            RoomStatus.DIRTY.value,
+            RoomStatus.READY.value,
+            RoomStatus.OCCUPIED.value,
+            RoomStatus.MAINTENANCE.value,
+        )
         if room.status not in valid_statuses and room.status not in valid_status_values:
             raise ValueError(f"Room status {room.status} does not allow reporting a maintenance issue")
 
         # 5. Save previous status
         previous_status = room.status.value if hasattr(room.status, "value") else str(room.status)
 
-        # 6. Update room status to MAINTENANCE
-        self.repository.update_room_status(issue.room_id, RoomStatus.MAINTENANCE)
+        # 6. Update room status to MAINTENANCE only if not OCCUPIED
+        if previous_status != RoomStatus.OCCUPIED.value:
+            if previous_status != RoomStatus.MAINTENANCE.value:
+                self.repository.update_room_status(issue.room_id, RoomStatus.MAINTENANCE)
+            new_room_status_enum = RoomStatus.MAINTENANCE
+        else:
+            new_room_status_enum = RoomStatus.OCCUPIED
+
+        new_status_str = new_room_status_enum.value if hasattr(new_room_status_enum, "value") else str(new_room_status_enum)
 
         # 7. Calculate SLA minutes
         sla_minutes = self._calculate_sla(issue.severity)
@@ -111,8 +131,6 @@ class MaintenanceAgent:
         # 10. Get candidate technicians & select best one
         candidates = self.repository.get_available_maintenance_staff(required_skill, room.floor)
         technician = self._select_best_technician(candidates, room.floor)
-
-        new_status_str = RoomStatus.MAINTENANCE.value if hasattr(RoomStatus.MAINTENANCE, "value") else str(RoomStatus.MAINTENANCE)
 
         # 11. IF technician was found
         if technician:
@@ -151,7 +169,7 @@ class MaintenanceAgent:
                 "sla_minutes": sla_minutes,
                 "assigned_technician_id": technician.id,
                 "previous_status": previous_status,
-                "new_status": RoomStatus.MAINTENANCE,
+                "new_status": new_room_status_enum,
                 "status": "COMPLETED",
             })
 

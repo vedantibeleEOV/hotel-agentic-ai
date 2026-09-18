@@ -19,6 +19,7 @@ from app.models.enums import (
     RoomStatus,
     StaffRole,
     TaskStatus,
+    TaskType,
 )
 from app.models.guest import Guest
 from app.models.maintenance_incident import MaintenanceIncident
@@ -330,14 +331,35 @@ class MockHotelRepository:
             ]
 
             if not remaining_room_tasks:
-                room.status = RoomStatus.READY
+                all_room_tasks = [
+                    t for t in self.operational_tasks.values()
+                    if t.room_id == task.room_id
+                ]
+                had_maintenance = any(
+                    (t.task_type.value if hasattr(t.task_type, "value") else str(t.task_type)) == TaskType.ROOM_MAINTENANCE.value
+                    for t in all_room_tasks
+                )
+                room_status_val = room.status.value if hasattr(room.status, "value") else str(room.status)
+
+                if (
+                    had_maintenance
+                    and room_status_val == RoomStatus.OCCUPIED.value
+                ):
+                    pass
+                elif had_maintenance:
+                    room.status = RoomStatus.INSPECTION
+                    from app.agents.room_readiness_agent import RoomReadinessAgent
+                    readiness_agent = RoomReadinessAgent(self)
+                    readiness_agent.verify_post_maintenance(task.room_id)
+                else:
+                    room.status = RoomStatus.READY
             else:
                 has_maintenance = any(
                     t.task_type == TaskType.ROOM_MAINTENANCE for t in remaining_room_tasks
                 )
                 if has_maintenance:
                     room.status = RoomStatus.MAINTENANCE
-                else:
+                elif room.status != RoomStatus.OCCUPIED:
                     room.status = RoomStatus.CLEANING
 
         return task

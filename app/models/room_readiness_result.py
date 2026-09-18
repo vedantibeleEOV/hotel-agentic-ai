@@ -8,13 +8,13 @@ class RoomReadinessResult(BaseModel):
     room_id: int
     previous_status: str
     new_status: str
-    next_reservation_id: Optional[int]
-    next_guest_id: Optional[int]
-    next_guest_type: Optional[str]
-    early_check_in_requested: bool
-    hours_until_arrival: Optional[float]
-    priority_score: int
-    priority_level: str
-    next_agent: str
+    next_reservation_id: Optional[int] = None
+    next_guest_id: Optional[int] = None
+    next_guest_type: Optional[str] = None
+    early_check_in_requested: bool = False
+    hours_until_arrival: Optional[float] = None
+    priority_score: int = 0
+    priority_level: str = "NORMAL"
+    next_agent: Optional[str] = None
     status: str
     reason: str

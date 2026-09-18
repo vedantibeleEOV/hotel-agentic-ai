@@ -1,6 +1,7 @@
 from typing import Any, Union
+from uuid import uuid4
 from app.models.checkout_event import CheckoutEvent
-from app.models.enums import GuestType, RoomStatus
+from app.models.enums import GuestType, RoomStatus, TaskStatus
 from app.models.room_readiness_result import RoomReadinessResult
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
@@ -103,6 +104,48 @@ class RoomReadinessAgent:
             "priority_score": priority_score,
             "priority_level": priority_level,
             "next_agent": "HOUSEKEEPING_AGENT",
+            "status": "COMPLETED",
+        }
+        self.activity_logs.append(log_entry)
+        return result
+
+    def verify_post_maintenance(self, room_id: int) -> RoomReadinessResult:
+        room = self.repository.get_room_by_id(room_id)
+        if not room:
+            raise ValueError(f"Room with ID {room_id} not found.")
+
+        # Check for any remaining active tasks for this room
+        active_statuses = (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
+        active_status_values = (TaskStatus.PENDING.value, TaskStatus.ASSIGNED.value, TaskStatus.IN_PROGRESS.value)
+
+        active_tasks = [
+            t for t in self.repository.operational_tasks.values()
+            if t.room_id == room_id and (t.status in active_statuses or t.status in active_status_values)
+        ]
+        if active_tasks:
+            raise ValueError(f"Room {room_id} still has {len(active_tasks)} active task(s) and cannot be marked READY.")
+
+        previous_status = room.status.value if hasattr(room.status, "value") else str(room.status)
+        self.repository.update_room_status(room_id=room_id, new_status=RoomStatus.READY)
+        new_status = RoomStatus.READY.value
+
+        event_id = uuid4()
+        result = RoomReadinessResult(
+            event_id=event_id,
+            room_id=room_id,
+            previous_status=previous_status,
+            new_status=new_status,
+            status="INSPECTION_PASSED",
+            reason="Post-maintenance inspection verified: no active tasks remaining; room transitioned to READY.",
+        )
+
+        log_entry = {
+            "agent": "ROOM_READINESS_AGENT",
+            "event_id": event_id,
+            "action": "VERIFY_POST_MAINTENANCE",
+            "room_id": room_id,
+            "previous_status": previous_status,
+            "new_status": new_status,
             "status": "COMPLETED",
         }
         self.activity_logs.append(log_entry)

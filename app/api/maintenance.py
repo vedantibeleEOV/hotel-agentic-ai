@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.agents.maintenance_agent import MaintenanceAgent
+from app.agents.orchestrator_agent import OperationsOrchestratorAgent
 from app.models.maintenance_issue_report import MaintenanceIssueReport
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 router = APIRouter()
 repository = PostgresHotelRepository()
+orchestrator = OperationsOrchestratorAgent(repository)
 maintenance_agent = MaintenanceAgent(repository)
 
 
@@ -26,6 +28,7 @@ maintenance_agent = MaintenanceAgent(repository)
 )
 async def process_maintenance_issue(issue: MaintenanceIssueReport):
     try:
+        orchestration_result = orchestrator.process_maintenance_report(issue)
         result = maintenance_agent.report_issue(issue)
     except ValueError as e:
         err_msg = str(e)
@@ -42,5 +45,6 @@ async def process_maintenance_issue(issue: MaintenanceIssueReport):
     return {
         "message": "Maintenance issue reported and routed",
         "processing_status": "ROUTED",
+        "orchestration": orchestration_result,
         "maintenance": result,
     }

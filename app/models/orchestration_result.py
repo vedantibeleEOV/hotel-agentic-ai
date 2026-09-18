@@ -9,7 +9,7 @@ class OrchestrationResult(BaseModel):
     current_agent: str
     next_agent: str
     room_id: int
-    reservation_id: int
-    next_reservation_id: Optional[int]
+    reservation_id: Optional[int] = None
+    next_reservation_id: Optional[int] = None
     status: str
     reason: str

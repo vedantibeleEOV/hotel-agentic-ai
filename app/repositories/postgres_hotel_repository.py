@@ -362,12 +362,33 @@ class PostgresHotelRepository:
                 remaining_room_tasks = list(session.execute(remaining_room_tasks_stmt).scalars().all())
 
                 if not remaining_room_tasks:
-                    room_entity.status = RoomStatus.READY.value
+                    all_room_tasks_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.room_id == task_entity.room_id
+                    )
+                    all_room_tasks = list(session.execute(all_room_tasks_stmt).scalars().all())
+                    had_maintenance = any(
+                        t.task_type == TaskType.ROOM_MAINTENANCE.value
+                        for t in all_room_tasks
+                    )
+
+                    if (
+                        had_maintenance
+                        and room_entity.status == RoomStatus.OCCUPIED.value
+                    ):
+                        pass
+                    elif had_maintenance:
+                        room_entity.status = RoomStatus.INSPECTION.value
+                        session.commit()
+                        from app.agents.room_readiness_agent import RoomReadinessAgent
+                        readiness_agent = RoomReadinessAgent(self)
+                        readiness_agent.verify_post_maintenance(task_entity.room_id)
+                    else:
+                        room_entity.status = RoomStatus.READY.value
                 else:
                     has_maintenance = any(t.task_type == TaskType.ROOM_MAINTENANCE.value for t in remaining_room_tasks)
                     if has_maintenance:
                         room_entity.status = RoomStatus.MAINTENANCE.value
-                    else:
+                    elif room_entity.status != RoomStatus.OCCUPIED.value:
                         room_entity.status = RoomStatus.CLEANING.value
 
             session.commit()

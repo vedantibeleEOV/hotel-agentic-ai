@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", tags=["Health"])
+@router.get("/", tags=["Health"], include_in_schema=False)
 async def root():
     return {
         "app": settings.PROJECT_NAME,
@@ -22,13 +22,13 @@ async def root():
     }
 
 
-@router.get("/health", tags=["Health"])
+@router.get("/health", tags=["Health"], include_in_schema=False)
 async def health_check():
     return {"status": "healthy", "debug": settings.DEBUG}
 
 
-@router.get("/health/db", tags=["Health"], summary="Database Health Check")
-@router.get("/db", tags=["Health"], summary="Database Health Check Alias")
+@router.get("/health/db", tags=["Health"], summary="Database Health Check", include_in_schema=False)
+@router.get("/db", tags=["Health"], summary="Database Health Check Alias", include_in_schema=False)
 async def db_health_check(db: Session = Depends(get_db)):
     """Check PostgreSQL database connection health via SELECT 1 query."""
     try:

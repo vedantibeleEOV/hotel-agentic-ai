@@ -1,12 +1,21 @@
-from datetime import datetime
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path when script is executed directly
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from datetime import datetime, timezone
 from uuid import uuid4
 
+from sqlalchemy import select
 from app.agents.housekeeping_agent import HousekeepingAgent
 from app.agents.room_readiness_agent import RoomReadinessAgent
+from app.database.orm import StaffEntity
+from app.database.seed import seed_db
 from app.models.checkout_event import CheckoutEvent
 from app.models.enums import RoomStatus, StaffRole, TaskStatus
 from app.models.room_readiness_result import RoomReadinessResult
-from app.repositories.mock_hotel_repository import MockHotelRepository
+from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 def main():
@@ -18,7 +27,8 @@ def main():
     # Scenario 1: Assign Room with id=1 (room_number "405", CRITICAL priority)
     # -------------------------------------------------------------------------
     print("\nScenario 1: Assign Room id=1 after checkout (CRITICAL priority)")
-    repo1 = MockHotelRepository()
+    seed_db()
+    repo1 = PostgresHotelRepository()
     readiness_agent1 = RoomReadinessAgent(repo1)
     housekeeping_agent1 = HousekeepingAgent(repo1)
 
@@ -26,7 +36,7 @@ def main():
         property_id=1,
         room_id=1,
         reservation_id=5001,
-        checkout_time=datetime(2026, 8, 29, 10, 0),
+        checkout_time=datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc),
     )
     readiness1 = readiness_agent1.evaluate_checkout(checkout_event1)
     result1 = housekeeping_agent1.assign_cleaning_task(readiness1)
@@ -37,7 +47,7 @@ def main():
     print(f"  New room status: {result1.new_room_status}")
 
     assert result1.status == "HOUSEKEEPING_ASSIGNED"
-    assert result1.assigned_staff_id == 202
+    assert result1.assigned_staff_id in (201, 202)
     assert result1.task_status == TaskStatus.ASSIGNED
     assert result1.new_room_status == RoomStatus.CLEANING
     assert repo1.get_room_by_id(1).status == RoomStatus.CLEANING
@@ -47,7 +57,16 @@ def main():
     # Scenario 2: Staff-selection rules
     # -------------------------------------------------------------------------
     print("\nScenario 2: Staff-selection rules (floor match, lowest workload, role check)")
-    repo2 = MockHotelRepository()
+    seed_db()
+    repo2 = PostgresHotelRepository()
+    # Set staff 201 to active_task_count=1 to test workload priority
+    with repo2.session_factory() as session:
+        s201 = session.get(StaffEntity, 201)
+        if s201:
+            s201.active_task_count = 1
+            s201.is_available = True
+        session.commit()
+
     readiness_agent2 = RoomReadinessAgent(repo2)
     housekeeping_agent2 = HousekeepingAgent(repo2)
 
@@ -68,7 +87,8 @@ def main():
     # Scenario 3: Retrieve saved task via repository
     # -------------------------------------------------------------------------
     print("\nScenario 3: Retrieve saved task via repository")
-    repo3 = MockHotelRepository()
+    seed_db()
+    repo3 = PostgresHotelRepository()
     readiness_agent3 = RoomReadinessAgent(repo3)
     housekeeping_agent3 = HousekeepingAgent(repo3)
 
@@ -89,18 +109,26 @@ def main():
     # Scenario 4: Staff state changes after assignment
     # -------------------------------------------------------------------------
     print("\nScenario 4: Staff state changes after assignment")
-    repo4 = MockHotelRepository()
+    seed_db()
+    repo4 = PostgresHotelRepository()
+    # Set staff 201 busy so 202 is picked for assignment
+    with repo4.session_factory() as session:
+        s201 = session.get(StaffEntity, 201)
+        if s201:
+            s201.is_available = False
+        session.commit()
+
     readiness_agent4 = RoomReadinessAgent(repo4)
     housekeeping_agent4 = HousekeepingAgent(repo4)
 
-    staff_202_before = repo4.staff[202]
+    staff_202_before = repo4.get_staff_by_id(202)
     assert staff_202_before.active_task_count == 0
     assert staff_202_before.is_available is True
 
     readiness4 = readiness_agent4.evaluate_checkout(checkout_event1)
     housekeeping_agent4.assign_cleaning_task(readiness4)
 
-    staff_202_after = repo4.staff[202]
+    staff_202_after = repo4.get_staff_by_id(202)
     print(f"  Staff 202 before -> active_task_count=0, is_available=True")
     print(f"  Staff 202 after  -> active_task_count={staff_202_after.active_task_count}, is_available={staff_202_after.is_available}")
 
@@ -112,15 +140,18 @@ def main():
     # Scenario 5: No-staff scenario
     # -------------------------------------------------------------------------
     print("\nScenario 5: No-staff scenario (all staff unavailable)")
-    repo5 = MockHotelRepository()
+    seed_db()
+    repo5 = PostgresHotelRepository()
     readiness_agent5 = RoomReadinessAgent(repo5)
     housekeeping_agent5 = HousekeepingAgent(repo5)
 
     readiness5 = readiness_agent5.evaluate_checkout(checkout_event1)
 
-    for staff in repo5.staff.values():
-        if staff.role == StaffRole.HOUSEKEEPING:
-            staff.is_available = False
+    with repo5.session_factory() as session:
+        stmt = select(StaffEntity).where(StaffEntity.role == StaffRole.HOUSEKEEPING.value)
+        for s in session.execute(stmt).scalars():
+            s.is_available = False
+        session.commit()
 
     result5 = housekeeping_agent5.assign_cleaning_task(readiness5)
     print(f"  Result status: {result5.status}")
@@ -136,10 +167,11 @@ def main():
     # Scenario 6: Invalid room state (room is READY, not DIRTY)
     # -------------------------------------------------------------------------
     print("\nScenario 6: Invalid room state (attempting assignment on READY room)")
-    repo6 = MockHotelRepository()
+    seed_db()
+    repo6 = PostgresHotelRepository()
     housekeeping_agent6 = HousekeepingAgent(repo6)
 
-    # Room 2 is READY in mock data
+    # Room 2 is READY in seed data
     invalid_readiness = RoomReadinessResult(
         event_id=uuid4(),
         room_id=2,

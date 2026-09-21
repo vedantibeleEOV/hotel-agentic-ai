@@ -5,12 +5,11 @@ from app.models.enums import RoomStatus, TaskStatus, TaskType
 from app.models.housekeeping_result import HousekeepingResult
 from app.models.operational_task import OperationalTask
 from app.models.room_readiness_result import RoomReadinessResult
-from app.repositories.mock_hotel_repository import MockHotelRepository
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 class HousekeepingAgent:
-    def __init__(self, repository: Union[MockHotelRepository, PostgresHotelRepository, Any]):
+    def __init__(self, repository: Union[PostgresHotelRepository, Any]):
         self.repository = repository
         self.activity_logs = []
 

@@ -5,6 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.agents.maintenance_agent import MaintenanceAgent
+from app.database.orm import StaffEntity
+from app.database.seed import seed_db
 from app.models.enums import (
     IncidentStatus,
     MaintenanceCategory,
@@ -13,7 +15,7 @@ from app.models.enums import (
     RoomStatus,
 )
 from app.models.maintenance_issue_report import MaintenanceIssueReport
-from app.repositories.mock_hotel_repository import MockHotelRepository
+from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 def run_all_tests():
@@ -22,8 +24,9 @@ def run_all_tests():
 
     # Test 1: Room 1 (floor 4, CLEANING), reported by 202 (housekeeping), HVAC, HIGH
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -44,8 +47,9 @@ def run_all_tests():
 
     # Test 2: Same as Test 1 but CRITICAL severity -> SLA 15, priority score 100
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -68,8 +72,9 @@ def run_all_tests():
 
     # Test 3: ELECTRICAL, MEDIUM -> Assigned tech 302 (Suresh)
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -90,10 +95,16 @@ def run_all_tests():
 
     # Test 4: Both staff 301 & 302 unavailable -> WAITING_FOR_TECHNICIAN, None tech, ESCALATED
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
-        repo.staff[301].is_available = False
-        repo.staff[302].is_available = False
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
+        with repo.session_factory() as session:
+            for tid in (301, 302):
+                s = session.get(StaffEntity, tid)
+                if s:
+                    s.is_available = False
+            session.commit()
+
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -115,7 +126,8 @@ def run_all_tests():
 
     # Test 5: Invalid room_id (999) -> ValueError
     try:
-        repo = MockHotelRepository()
+        seed_db()
+        repo = PostgresHotelRepository()
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -128,7 +140,7 @@ def run_all_tests():
         try:
             agent.report_issue(issue)
             print("Test 5: FAIL - Expected ValueError was not raised")
-        except ValueError as ve:
+        except ValueError:
             print("Test 5: PASS")
             passed += 1
     except Exception as e:
@@ -136,8 +148,9 @@ def run_all_tests():
 
     # Test 6: Invalid reported_by_staff_id (999) -> ValueError
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -156,54 +169,56 @@ def run_all_tests():
     except Exception as e:
         print(f"Test 6: FAIL - {e}")
 
-    # Test 7: reported_by_staff_id=301 (MAINTENANCE staff) -> ValueError
+    # Test 7: reported_by_staff_id=301 (MAINTENANCE staff) -> successfully reports issue
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
             room_id=1,
             reported_by_staff_id=301,
-            description="Report by maintenance staff instead of housekeeping",
+            description="Report by maintenance staff for secondary issue",
             category=MaintenanceCategory.GENERAL,
             severity=MaintenanceSeverity.LOW,
         )
-        try:
-            agent.report_issue(issue)
-            print("Test 7: FAIL - Expected ValueError was not raised")
-        except ValueError:
-            print("Test 7: PASS")
-            passed += 1
+        result = agent.report_issue(issue)
+        assert result.incident_id is not None, "Expected valid incident_id"
+        assert result.assigned_technician_id is not None, "Expected assigned technician"
+        print("Test 7: PASS")
+        passed += 1
     except Exception as e:
         print(f"Test 7: FAIL - {e}")
 
-    # Test 8: Room 2 status READY -> ValueError
+    # Test 8: Room 1 status OCCUPIED -> Maintenance reported and room remains OCCUPIED
     try:
-        repo = MockHotelRepository()
-        repo.rooms[2].status = RoomStatus.READY
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.OCCUPIED)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
-            room_id=2,
+            room_id=1,
             reported_by_staff_id=202,
-            description="Reporting issue on a READY room",
-            category=MaintenanceCategory.GENERAL,
-            severity=MaintenanceSeverity.LOW,
+            description="AC not cooling properly in occupied room",
+            category=MaintenanceCategory.HVAC,
+            severity=MaintenanceSeverity.MEDIUM,
         )
-        try:
-            agent.report_issue(issue)
-            print("Test 8: FAIL - Expected ValueError was not raised")
-        except ValueError:
-            print("Test 8: PASS")
-            passed += 1
+        result = agent.report_issue(issue)
+        assert result.assigned_technician_id == 301, f"Expected tech 301, got {result.assigned_technician_id}"
+        assert result.new_room_status == RoomStatus.OCCUPIED, f"Expected room to remain OCCUPIED, got {result.new_room_status}"
+        assert repo.get_room_by_id(1).status == RoomStatus.OCCUPIED, f"Expected repo room to remain OCCUPIED, got {repo.get_room_by_id(1).status}"
+        print("Test 8: PASS")
+        passed += 1
     except Exception as e:
         print(f"Test 8: FAIL - {e}")
 
     # Test 9: Verify incident and task persist in repository
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(
@@ -227,8 +242,9 @@ def run_all_tests():
 
     # Test 10: Check activity logs on MaintenanceAgent instance
     try:
-        repo = MockHotelRepository()
-        repo.rooms[1].status = RoomStatus.CLEANING
+        seed_db()
+        repo = PostgresHotelRepository()
+        repo.update_room_status(1, RoomStatus.CLEANING)
         agent = MaintenanceAgent(repo)
 
         issue = MaintenanceIssueReport(

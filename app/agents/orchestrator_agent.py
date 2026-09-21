@@ -3,12 +3,11 @@ from uuid import uuid4
 from app.models.checkout_event import CheckoutEvent
 from app.models.maintenance_issue_report import MaintenanceIssueReport
 from app.models.orchestration_result import OrchestrationResult
-from app.repositories.mock_hotel_repository import MockHotelRepository
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 class OperationsOrchestratorAgent:
-    def __init__(self, repository: Union[MockHotelRepository, PostgresHotelRepository, Any]):
+    def __init__(self, repository: Union[PostgresHotelRepository, Any]):
         self.repository = repository
         self.activity_logs = []
 

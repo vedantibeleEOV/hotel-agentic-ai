@@ -1,5 +1,6 @@
-from typing import Any, Union
+from typing import Any, Optional, Union
 from uuid import uuid4
+from app.agents.issue_classifier_agent import IssueClassifierAgent
 from app.models.checkout_event import CheckoutEvent
 from app.models.maintenance_issue_report import MaintenanceIssueReport
 from app.models.orchestration_result import OrchestrationResult
@@ -7,8 +8,13 @@ from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 
 class OperationsOrchestratorAgent:
-    def __init__(self, repository: Union[PostgresHotelRepository, Any]):
+    def __init__(
+        self,
+        repository: Union[PostgresHotelRepository, Any],
+        classifier_agent: Optional[Any] = None,
+    ):
         self.repository = repository
+        self.classifier_agent = classifier_agent or IssueClassifierAgent()
         self.activity_logs = []
 
     def process_checkout_event(self, event: CheckoutEvent) -> OrchestrationResult:
@@ -59,6 +65,27 @@ class OperationsOrchestratorAgent:
         if not room:
             raise ValueError(f"Room with ID {issue.room_id} not found.")
 
+        # If category or severity is missing, auto-classify using IssueClassifierAgent
+        if issue.category is None or issue.severity is None:
+            classified_cat, classified_sev, needs_human_review = (
+                self.classifier_agent.classify_with_fallback(issue.description)
+            )
+            if issue.category is None:
+                issue.category = classified_cat
+            if issue.severity is None:
+                issue.severity = classified_sev
+
+            if needs_human_review:
+                self.activity_logs.append({
+                    "agent": "OPERATIONS_ORCHESTRATOR",
+                    "action": "CLASSIFICATION_HUMAN_REVIEW_REQUIRED",
+                    "room_id": issue.room_id,
+                    "description": issue.description,
+                    "category": issue.category.value if hasattr(issue.category, "value") else str(issue.category),
+                    "severity": issue.severity.value if hasattr(issue.severity, "value") else str(issue.severity),
+                    "status": "FLAGGED_FOR_REVIEW",
+                })
+
         event_id = uuid4()
         category_str = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
 
@@ -85,3 +112,4 @@ class OperationsOrchestratorAgent:
         }
         self.activity_logs.append(log_entry)
         return result
+

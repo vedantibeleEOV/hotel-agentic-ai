@@ -22,7 +22,8 @@ def seed_db() -> dict:
     skipped_counts = {"rooms": 0, "guests": 0, "reservations": 0, "staff": 0}
 
     try:
-        # Clear operational tasks on reset
+        # Clear maintenance incidents and operational tasks on reset
+        session.execute(text("DELETE FROM maintenance_incidents;"))
         session.execute(text("DELETE FROM operational_tasks;"))
         session.commit()
 

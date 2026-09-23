@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.database.connection import SessionLocal
 from app.database.orm import (
     GuestEntity,
+    MaintenanceIncidentEntity,
     OperationalTaskEntity,
     ReservationEntity,
     RoomEntity,
@@ -20,6 +21,8 @@ from app.database.orm import (
 from app.models.enums import (
     GuestType,
     IncidentStatus,
+    MaintenanceCategory,
+    MaintenanceSeverity,
     MaintenanceSkill,
     RoomStatus,
     StaffRole,
@@ -39,7 +42,22 @@ class PostgresHotelRepository:
 
     def __init__(self, session_factory=SessionLocal):
         self.session_factory = session_factory
-        self.maintenance_incidents: Dict[UUID, MaintenanceIncident] = {}
+
+    @staticmethod
+    def _to_pydantic_incident(entity: MaintenanceIncidentEntity) -> MaintenanceIncident:
+        return MaintenanceIncident(
+            id=entity.id,
+            room_id=entity.room_id,
+            reported_by_staff_id=entity.reported_by_staff_id,
+            description=entity.description,
+            category=MaintenanceCategory(entity.category),
+            severity=MaintenanceSeverity(entity.severity),
+            status=IncidentStatus(entity.status),
+            assigned_technician_id=entity.assigned_technician_id,
+            sla_minutes=entity.sla_minutes,
+            created_at=entity.created_at,
+            operational_task_id=entity.operational_task_id,
+        )
 
     @staticmethod
     def _to_pydantic_room(entity: RoomEntity) -> Room:
@@ -268,40 +286,81 @@ class PostgresHotelRepository:
             )
             return filtered
 
+    @property
+    def maintenance_incidents(self) -> Dict[UUID, MaintenanceIncident]:
+        """Return dictionary of all maintenance incidents keyed by incident UUID from PostgreSQL."""
+        with self.session_factory() as session:
+            entities = session.execute(select(MaintenanceIncidentEntity)).scalars().all()
+            return {e.id: self._to_pydantic_incident(e) for e in entities}
+
     def save_maintenance_incident(
         self, incident: MaintenanceIncident
     ) -> MaintenanceIncident:
-        """Store incident in self.maintenance_incidents keyed by incident.id and return it."""
-        self.maintenance_incidents[incident.id] = incident
+        """Save or update a maintenance incident in PostgreSQL database."""
+        cat_val = incident.category.value if hasattr(incident.category, "value") else str(incident.category)
+        sev_val = incident.severity.value if hasattr(incident.severity, "value") else str(incident.severity)
+        status_val = incident.status.value if hasattr(incident.status, "value") else str(incident.status)
+
+        with self.session_factory() as session:
+            existing = session.get(MaintenanceIncidentEntity, incident.id)
+            if existing:
+                existing.room_id = incident.room_id
+                existing.reported_by_staff_id = incident.reported_by_staff_id
+                existing.description = incident.description
+                existing.category = cat_val
+                existing.severity = sev_val
+                existing.status = status_val
+                existing.assigned_technician_id = incident.assigned_technician_id
+                existing.sla_minutes = incident.sla_minutes
+                existing.operational_task_id = incident.operational_task_id
+            else:
+                incident_entity = MaintenanceIncidentEntity(
+                    id=incident.id,
+                    room_id=incident.room_id,
+                    reported_by_staff_id=incident.reported_by_staff_id,
+                    description=incident.description,
+                    category=cat_val,
+                    severity=sev_val,
+                    status=status_val,
+                    assigned_technician_id=incident.assigned_technician_id,
+                    sla_minutes=incident.sla_minutes,
+                    created_at=incident.created_at,
+                    operational_task_id=incident.operational_task_id,
+                )
+                session.add(incident_entity)
+            session.commit()
         return incident
 
     def get_maintenance_incident_by_id(
-        self, incident_id
+        self, incident_id: Union[UUID, str]
     ) -> Optional[MaintenanceIncident]:
-        """Return matching MaintenanceIncident or None if not found."""
-        return self.maintenance_incidents.get(incident_id)
+        """Return matching MaintenanceIncident from PostgreSQL or None if not found."""
+        uid = UUID(str(incident_id)) if isinstance(incident_id, str) else incident_id
+        with self.session_factory() as session:
+            entity = session.get(MaintenanceIncidentEntity, uid)
+            return self._to_pydantic_incident(entity) if entity else None
 
     def assign_incident_to_technician(
-        self, incident_id, technician_id: int
+        self, incident_id: Union[UUID, str], technician_id: int
     ) -> MaintenanceIncident:
         """Assign an incident to a technician and update statuses in PostgreSQL."""
-        incident = self.maintenance_incidents.get(incident_id)
-        if not incident:
-            raise ValueError(f"Maintenance incident with ID {incident_id} not found.")
-
+        uid = UUID(str(incident_id)) if isinstance(incident_id, str) else incident_id
         with self.session_factory() as session:
+            incident_entity = session.get(MaintenanceIncidentEntity, uid)
+            if not incident_entity:
+                raise ValueError(f"Maintenance incident with ID {incident_id} not found.")
+
             staff_entity = session.get(StaffEntity, technician_id)
             if not staff_entity:
                 raise ValueError(f"Staff with ID {technician_id} not found.")
 
-            incident.assigned_technician_id = technician_id
-            incident.status = IncidentStatus.ASSIGNED
+            incident_entity.assigned_technician_id = technician_id
+            incident_entity.status = IncidentStatus.ASSIGNED.value
 
             staff_entity.is_available = False
-            staff_entity.assigned_room_id = incident.room_id
+            staff_entity.assigned_room_id = incident_entity.room_id
             session.commit()
-
-        return incident
+            return self._to_pydantic_incident(incident_entity)
 
     def complete_task(self, task_id: UUID) -> OperationalTask:
         """Mark an operational task as completed, release assigned staff, and update room status."""

@@ -1,4 +1,5 @@
 from app.database.orm.guest_entity import GuestEntity
+from app.database.orm.maintenance_incident_entity import MaintenanceIncidentEntity
 from app.database.orm.operational_task_entity import OperationalTaskEntity
 from app.database.orm.reservation_entity import ReservationEntity
 from app.database.orm.room_entity import RoomEntity
@@ -10,4 +11,5 @@ __all__ = [
     "ReservationEntity",
     "StaffEntity",
     "OperationalTaskEntity",
+    "MaintenanceIncidentEntity",
 ]

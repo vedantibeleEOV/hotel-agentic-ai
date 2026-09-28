@@ -1,5 +1,5 @@
 import uuid
-from uuid import uuid4
+from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
@@ -543,6 +543,53 @@ def test_maintenance_completed_before_cleaning_still_triggers_inspection():
     # Final room status must be READY, having successfully passed post-maintenance verification
     assert clean_complete_data["room"]["status"] == "READY"
     assert repo.get_room_by_id(1).status == RoomStatus.READY
+
+
+def test_maintenance_issue_auto_classification_end_to_end():
+    """Test full end-to-end flow where a request without category/severity is auto-classified by LLM and dispatched."""
+    client.post("/api/reset")
+    repo = PostgresHotelRepository()
+    from app.api.maintenance import repository as api_repo
+
+    # Post maintenance issue without category and without severity
+    res = client.post(
+        "/api/events/maintenance-issue",
+        json={
+            "room_id": 1,
+            "reported_by_staff_id": 201,
+            "description": "AC is running but the room is not cooling.",
+        },
+    )
+    assert res.status_code == 202
+    data = res.json()
+
+    # 1. Verify Orchestration output
+    assert "orchestration" in data
+    orch = data["orchestration"]
+    assert orch["status"] == "ROUTED"
+    assert "HVAC" in orch["reason"]
+
+    # 2. Verify Maintenance output
+    assert "maintenance" in data
+    maint = data["maintenance"]
+    assert maint["category"] == "HVAC"
+    assert maint["severity"] in ("HIGH", "MEDIUM")
+    assert maint["assigned_technician_id"] == 301
+    assert maint["result_status"] == "MAINTENANCE_ASSIGNED"
+
+    # 3. Verify Database persistence for task and incident
+    task_id = UUID(maint["operational_task_id"])
+    task = repo.get_operational_task_by_id(task_id)
+    assert task is not None
+    assert task.room_id == 1
+
+    incident_id = UUID(maint["incident_id"])
+    incident = api_repo.get_maintenance_incident_by_id(incident_id)
+    assert incident is not None
+    assert incident.category == MaintenanceCategory.HVAC
+    assert incident.assigned_technician_id == 301
+
+
 
 
 

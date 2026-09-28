@@ -29,9 +29,10 @@ target_metadata = Base.metadata
 
 def include_object(object, name, type_, reflected, compare_to):
     """Filter out legacy tables so Alembic leaves them untouched."""
-    if type_ == "table" and name in {"housekeeping_tasks", "maintenance_incidents"}:
+    if type_ == "table" and name in {"housekeeping_tasks"}:
         return False
     return True
+
 
 
 def run_migrations_offline() -> None:

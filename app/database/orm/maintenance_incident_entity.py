@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
@@ -16,6 +16,7 @@ class MaintenanceIncidentEntity(Base):
     description = Column(Text, nullable=False)
     category = Column(String(50), nullable=False)
     severity = Column(String(50), nullable=False)
+    affects_room_readiness = Column(Boolean, nullable=True)
     status = Column(String(50), nullable=False, default="OPEN")
     assigned_technician_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     sla_minutes = Column(Integer, nullable=False)

@@ -15,8 +15,8 @@ from app.models.enums import EventType
 class CheckoutEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     event_type: EventType = EventType.GUEST_CHECKED_OUT
-    property_id: int = Field(..., gt=0)
+    property_id: int = Field(default=1, gt=0)
     room_id: int = Field(..., gt=0)
     reservation_id: int = Field(..., gt=0)
-    checkout_time: datetime
+    checkout_time: datetime = Field(default_factory=datetime.utcnow)
 

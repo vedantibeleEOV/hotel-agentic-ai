@@ -101,13 +101,17 @@ class MaintenanceAgent:
         # 5. Save previous status
         previous_status = room.status.value if hasattr(room.status, "value") else str(room.status)
 
-        # 6. Update room status to MAINTENANCE only if not OCCUPIED
-        if previous_status != RoomStatus.OCCUPIED.value:
+        # 6. Update room status to MAINTENANCE only if affects_room_readiness is True and room is not OCCUPIED
+        affects_readiness = getattr(issue, "affects_room_readiness", True)
+        if affects_readiness is None:
+            affects_readiness = True
+
+        if previous_status != RoomStatus.OCCUPIED.value and affects_readiness:
             if previous_status != RoomStatus.MAINTENANCE.value:
                 self.repository.update_room_status(issue.room_id, RoomStatus.MAINTENANCE)
             new_room_status_enum = RoomStatus.MAINTENANCE
         else:
-            new_room_status_enum = RoomStatus.OCCUPIED
+            new_room_status_enum = room.status if isinstance(room.status, RoomStatus) else RoomStatus(previous_status)
 
         new_status_str = new_room_status_enum.value if hasattr(new_room_status_enum, "value") else str(new_room_status_enum)
 
@@ -124,6 +128,7 @@ class MaintenanceAgent:
             description=issue.description,
             category=issue.category,
             severity=issue.severity,
+            affects_room_readiness=issue.affects_room_readiness,
             sla_minutes=sla_minutes,
         )
         saved_incident = self.repository.save_maintenance_incident(incident)

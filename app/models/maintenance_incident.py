@@ -20,8 +20,10 @@ class MaintenanceIncident(BaseModel):
     description: str
     category: MaintenanceCategory
     severity: MaintenanceSeverity
+    affects_room_readiness: Optional[bool] = None
     status: IncidentStatus = IncidentStatus.OPEN
     assigned_technician_id: Optional[int] = None
     sla_minutes: int
     created_at: datetime = Field(default_factory=datetime.now)
     operational_task_id: Optional[UUID] = None
+

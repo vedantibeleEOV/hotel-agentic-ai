@@ -99,6 +99,30 @@ def seed_db() -> dict:
                 "check_out_time": datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc),
                 "early_check_in_requested": True,
             },
+            {
+                "id": 5003,
+                "guest_id": 101,
+                "room_id": 1,
+                "check_in_time": datetime(2026, 8, 29, 14, 0, tzinfo=timezone.utc),
+                "check_out_time": datetime(2026, 8, 30, 10, 0, tzinfo=timezone.utc),
+                "early_check_in_requested": False,
+            },
+            {
+                "id": 5004,
+                "guest_id": 101,
+                "room_id": 1,
+                "check_in_time": datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc),
+                "check_out_time": datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc),
+                "early_check_in_requested": False,
+            },
+            {
+                "id": 5005,
+                "guest_id": 101,
+                "room_id": 1,
+                "check_in_time": datetime(2026, 9, 1, 14, 0, tzinfo=timezone.utc),
+                "check_out_time": datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc),
+                "early_check_in_requested": False,
+            },
         ]
         for item in reservations_data:
             existing = session.get(ReservationEntity, item["id"])

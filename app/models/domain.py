@@ -62,6 +62,7 @@ class MaintenanceIncident(Base):
     technician_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     category = Column(String(50), nullable=False)
     severity = Column(Integer, default=1)
+    affects_room_readiness = Column(Boolean, nullable=True)
     description = Column(Text, nullable=False)
     status = Column(String(50), default="open")
     created_at = Column(DateTime, default=datetime.utcnow)

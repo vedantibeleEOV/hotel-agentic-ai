@@ -9,6 +9,23 @@ repository = PostgresHotelRepository()
 
 
 @router.get(
+    "/rooms/{room_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Get room by ID",
+    description="Retrieve details of a single room including its current operational status.",
+)
+async def get_room_endpoint(room_id: int):
+    """Retrieve a room by ID."""
+    room = repository.get_room_by_id(room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Room with ID {room_id} not found.",
+        )
+    return room
+
+
+@router.get(
     "/tasks",
     status_code=status.HTTP_200_OK,
     summary="List all operational tasks",
@@ -58,7 +75,7 @@ async def get_task_endpoint(task_id: UUID):
     "/tasks/{task_id}/complete",
     status_code=status.HTTP_200_OK,
     summary="Complete a task and release staff",
-    description="Mark an operational task as completed, release assigned staff, and transition room to READY.",
+    description="Mark an operational task as completed, release assigned staff, and transition room status accordingly (READY for completed cleaning, or release on-hold housekeeping for maintenance).",
     responses={
         200: {
             "description": "Task completed successfully and staff released.",

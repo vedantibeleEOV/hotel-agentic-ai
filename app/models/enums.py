@@ -34,6 +34,7 @@ class TaskStatus(str, Enum):
     PENDING = "PENDING"
     ASSIGNED = "ASSIGNED"
     IN_PROGRESS = "IN_PROGRESS"
+    ON_HOLD = "ON_HOLD"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 

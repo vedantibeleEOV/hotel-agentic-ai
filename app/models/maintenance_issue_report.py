@@ -17,4 +17,6 @@ class MaintenanceIssueReport(BaseModel):
     description: str = Field(min_length=5, max_length=500)
     category: Optional[MaintenanceCategory] = None
     severity: Optional[MaintenanceSeverity] = None
+    affects_room_readiness: Optional[bool] = None
+
 

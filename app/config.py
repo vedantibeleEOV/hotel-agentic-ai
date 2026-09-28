@@ -27,19 +27,21 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        """Ensure Database URL uses psycopg 3 driver format for SQLAlchemy 2.x and contains password."""
+        """Ensure Database URL uses psycopg2 driver format for SQLAlchemy and contains password."""
         url = self.DATABASE_URL
         password = self.POSTGRES_PASSWORD or "postgres"
         user = self.POSTGRES_USER or "postgres"
         db = self.POSTGRES_DB or "hotel_operations_db"
 
         if not url:
-            url = f"postgresql+psycopg://{user}:{password}@localhost:5432/{db}"
+            url = f"postgresql+psycopg2://{user}:{password}@localhost:5432/{db}"
         else:
             if f"{user}@" in url and f":{password}@" not in url:
                 url = url.replace(f"{user}@", f"{user}:{password}@")
             if url.startswith("postgresql://"):
-                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            elif url.startswith("postgresql+psycopg://"):
+                url = url.replace("postgresql+psycopg://", "postgresql+psycopg2://", 1)
         return url
 
     model_config = SettingsConfigDict(

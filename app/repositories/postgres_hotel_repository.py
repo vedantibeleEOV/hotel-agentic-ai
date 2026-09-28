@@ -52,6 +52,7 @@ class PostgresHotelRepository:
             description=entity.description,
             category=MaintenanceCategory(entity.category),
             severity=MaintenanceSeverity(entity.severity),
+            affects_room_readiness=entity.affects_room_readiness,
             status=IncidentStatus(entity.status),
             assigned_technician_id=entity.assigned_technician_id,
             sla_minutes=entity.sla_minutes,
@@ -203,22 +204,32 @@ class PostgresHotelRepository:
             session.commit()
 
     def save_operational_task(self, task: OperationalTask) -> OperationalTask:
-        """Save an operational task to PostgreSQL database."""
+        """Save or update an operational task in PostgreSQL database."""
         status_val = task.status.value if hasattr(task.status, "value") else str(task.status)
         type_val = task.task_type.value if hasattr(task.task_type, "value") else str(task.task_type)
-        task_entity = OperationalTaskEntity(
-            id=task.id,
-            room_id=task.room_id,
-            task_type=type_val,
-            priority_score=task.priority_score,
-            priority_level=task.priority_level,
-            status=status_val,
-            assigned_staff_id=task.assigned_staff_id,
-            created_at=task.created_at,
-            notes=task.notes,
-        )
         with self.session_factory() as session:
-            session.add(task_entity)
+            existing = session.get(OperationalTaskEntity, task.id)
+            if existing:
+                existing.room_id = task.room_id
+                existing.task_type = type_val
+                existing.priority_score = task.priority_score
+                existing.priority_level = task.priority_level
+                existing.status = status_val
+                existing.assigned_staff_id = task.assigned_staff_id
+                existing.notes = task.notes
+            else:
+                task_entity = OperationalTaskEntity(
+                    id=task.id,
+                    room_id=task.room_id,
+                    task_type=type_val,
+                    priority_score=task.priority_score,
+                    priority_level=task.priority_level,
+                    status=status_val,
+                    assigned_staff_id=task.assigned_staff_id,
+                    created_at=task.created_at,
+                    notes=task.notes,
+                )
+                session.add(task_entity)
             session.commit()
         return task
 
@@ -309,6 +320,7 @@ class PostgresHotelRepository:
                 existing.description = incident.description
                 existing.category = cat_val
                 existing.severity = sev_val
+                existing.affects_room_readiness = incident.affects_room_readiness
                 existing.status = status_val
                 existing.assigned_technician_id = incident.assigned_technician_id
                 existing.sla_minutes = incident.sla_minutes
@@ -321,6 +333,7 @@ class PostgresHotelRepository:
                     description=incident.description,
                     category=cat_val,
                     severity=sev_val,
+                    affects_room_readiness=incident.affects_room_readiness,
                     status=status_val,
                     assigned_technician_id=incident.assigned_technician_id,
                     sla_minutes=incident.sla_minutes,
@@ -406,49 +419,52 @@ class PostgresHotelRepository:
                     else:
                         staff_entity.assigned_room_id = remaining_staff_tasks[0].room_id
 
-            # Update room status if no other active tasks for this room
+            # Update room status and orchestrate next steps based on task type
             room_entity = session.get(RoomEntity, task_entity.room_id)
             if room_entity:
-                remaining_room_tasks_stmt = select(OperationalTaskEntity).where(
-                    OperationalTaskEntity.room_id == task_entity.room_id,
-                    OperationalTaskEntity.id != task_id,
-                    OperationalTaskEntity.status.in_([
-                        TaskStatus.PENDING.value,
-                        TaskStatus.ASSIGNED.value,
-                        TaskStatus.IN_PROGRESS.value,
-                    ]),
-                )
-                remaining_room_tasks = list(session.execute(remaining_room_tasks_stmt).scalars().all())
+                task_type_val = task_entity.task_type
 
-                if not remaining_room_tasks:
-                    all_room_tasks_stmt = select(OperationalTaskEntity).where(
-                        OperationalTaskEntity.room_id == task_entity.room_id
-                    )
-                    all_room_tasks = list(session.execute(all_room_tasks_stmt).scalars().all())
-                    had_maintenance = any(
-                        t.task_type == TaskType.ROOM_MAINTENANCE.value
-                        for t in all_room_tasks
-                    )
-
-                    if (
-                        had_maintenance
-                        and room_entity.status == RoomStatus.OCCUPIED.value
-                    ):
-                        pass
-                    elif had_maintenance:
-                        room_entity.status = RoomStatus.INSPECTION.value
+                if task_type_val == TaskType.ROOM_MAINTENANCE.value:
+                    if room_entity.status != RoomStatus.OCCUPIED.value:
                         session.commit()
-                        from app.agents.room_readiness_agent import RoomReadinessAgent
-                        readiness_agent = RoomReadinessAgent(self)
-                        readiness_agent.verify_post_maintenance(task_entity.room_id)
-                    else:
+                        from app.agents.orchestrator_agent import OperationsOrchestratorAgent
+                        orchestrator = OperationsOrchestratorAgent(self)
+                        orchestrator.handle_maintenance_completed(task_entity.room_id)
+                elif task_type_val == TaskType.ROOM_CLEANING.value:
+                    remaining_room_tasks_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.room_id == task_entity.room_id,
+                        OperationalTaskEntity.id != task_id,
+                        OperationalTaskEntity.status.in_([
+                            TaskStatus.PENDING.value,
+                            TaskStatus.ASSIGNED.value,
+                            TaskStatus.IN_PROGRESS.value,
+                            TaskStatus.ON_HOLD.value,
+                        ]),
+                    )
+                    remaining_room_tasks = list(session.execute(remaining_room_tasks_stmt).scalars().all())
+
+                    if not remaining_room_tasks:
                         room_entity.status = RoomStatus.READY.value
+                    else:
+                        has_maintenance = any(t.task_type == TaskType.ROOM_MAINTENANCE.value for t in remaining_room_tasks)
+                        if has_maintenance:
+                            room_entity.status = RoomStatus.MAINTENANCE.value
+                        elif room_entity.status != RoomStatus.OCCUPIED.value:
+                            room_entity.status = RoomStatus.CLEANING.value
                 else:
-                    has_maintenance = any(t.task_type == TaskType.ROOM_MAINTENANCE.value for t in remaining_room_tasks)
-                    if has_maintenance:
-                        room_entity.status = RoomStatus.MAINTENANCE.value
-                    elif room_entity.status != RoomStatus.OCCUPIED.value:
-                        room_entity.status = RoomStatus.CLEANING.value
+                    remaining_room_tasks_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.room_id == task_entity.room_id,
+                        OperationalTaskEntity.id != task_id,
+                        OperationalTaskEntity.status.in_([
+                            TaskStatus.PENDING.value,
+                            TaskStatus.ASSIGNED.value,
+                            TaskStatus.IN_PROGRESS.value,
+                            TaskStatus.ON_HOLD.value,
+                        ]),
+                    )
+                    remaining_room_tasks = list(session.execute(remaining_room_tasks_stmt).scalars().all())
+                    if not remaining_room_tasks:
+                        room_entity.status = RoomStatus.READY.value
 
             session.commit()
             return self._to_pydantic_task(task_entity)

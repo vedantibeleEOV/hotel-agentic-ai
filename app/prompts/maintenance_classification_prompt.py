@@ -5,6 +5,7 @@ MAINTENANCE_CLASSIFICATION_PROMPT = """You are an expert hotel maintenance triag
 Evaluation Order:
 1. First, check whether the input describes a genuine hotel maintenance problem (e.g., physical defects, malfunctions, leaks, electrical, HVAC, plumbing, structural, appliances, lighting, furniture, locks, fixtures, or facility issues requiring repair or technical attention).
 2. If it is NOT a valid maintenance problem (such as random/gibberish text, missing guest supplies or amenities like "There is no bottle in my room", "no water bottle in room", "no towels", non-maintenance guest requests like "I need a water bottle", "Can you bring extra towels", room service, food/drinks, general housekeeping requests, or anything not involving physical maintenance repair):
+   - Missing items or amenities (towel, water bottle, soap, pillow, toiletries not in the room) are NOT maintenance problems. They are housekeeping or room service requests. Only things that are broken, damaged, leaking, or not working are maintenance problems.
    - Set "is_valid_issue": false
    - Set "category": null
    - Set "severity": null
@@ -60,6 +61,18 @@ Description: 'Can you bring extra towels and room service menu?'
 {{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
 
 Description: 'Please clean my room again'
+{{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
+
+Description: 'towel is not in room'
+{{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
+
+Description: 'Water bottle is not in room'
+{{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
+
+Description: 'No soap in the bathroom'
+{{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
+
+Description: 'Pillow is missing'
 {{"is_valid_issue": false, "category": null, "severity": null, "affects_room_readiness": null}}
 
 Description: 'Gas smell detected'

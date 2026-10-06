@@ -7,6 +7,7 @@ from app.database.orm import (
     ReservationEntity,
     RoomEntity,
     StaffEntity,
+    TaskActivityEntity,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "StaffEntity",
     "OperationalTaskEntity",
     "MaintenanceIncidentEntity",
+    "TaskActivityEntity",
 ]

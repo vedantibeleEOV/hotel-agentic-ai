@@ -18,7 +18,14 @@ class OperationalTaskEntity(Base):
     status = Column(String(50), nullable=False)
     assigned_staff_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
 
     room = relationship("RoomEntity", back_populates="operational_tasks")
     staff = relationship("StaffEntity", back_populates="operational_tasks")
+    activities = relationship(
+        "TaskActivityEntity",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="desc(TaskActivityEntity.timestamp)",
+    )

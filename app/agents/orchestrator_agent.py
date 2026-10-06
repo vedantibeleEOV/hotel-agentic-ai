@@ -2,7 +2,7 @@ from typing import Any, Optional, Union
 from uuid import uuid4
 from app.agents.issue_classifier_agent import IssueClassifierAgent
 from app.models.checkout_event import CheckoutEvent
-from app.models.enums import RoomStatus, TaskStatus, TaskType
+from app.models.enums import MaintenanceCategory, MaintenanceSeverity, RoomStatus, TaskStatus, TaskType
 from app.models.maintenance_issue_report import MaintenanceIssueReport
 from app.models.orchestration_result import OrchestrationResult
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
@@ -67,7 +67,7 @@ class OperationsOrchestratorAgent:
             raise ValueError(f"Room with ID {issue.room_id} not found.")
 
         # If category or severity is missing, auto-classify using IssueClassifierAgent
-        affects_room_readiness = True
+        classify_res = None
         if issue.category is None or issue.severity is None:
             try:
                 classify_res = self.classifier_agent.classify(issue.description)
@@ -84,7 +84,6 @@ class OperationsOrchestratorAgent:
 
                 issue.category = classify_res.get("category")
                 issue.severity = classify_res.get("severity")
-                affects_room_readiness = classify_res.get("affects_room_readiness", True)
             except ValueError:
                 raise
             except Exception:
@@ -103,7 +102,31 @@ class OperationsOrchestratorAgent:
                     raise ValueError("Please provide a valid maintenance issue description.")
                 issue.category = classified_cat
                 issue.severity = classified_sev
-                affects_room_readiness = True
+
+        # Determine affects_room_readiness:
+        # Non-disruptive issues (TV remote, lights, phone, minor electronics) do NOT block cleaning or affect readiness
+        desc_lower = (issue.description or "").lower()
+        NON_READINESS_BLOCKING_KEYWORDS = (
+            "remote", "tv", "television", "bulb", "lamp", "light", "flicker",
+            "battery", "kettle", "phone", "telephone", "wifi", "chair", "curtain", "hanger"
+        )
+        READINESS_BLOCKING_KEYWORDS = (
+            "leak", "water", "flood", "drain", "toilet", "clog", "pipe", "plumb",
+            "spark", "fire", "smoke", "gas", "burn", "shock", "lock", "plaster", "glass"
+        )
+
+        if issue.affects_room_readiness is not None:
+            affects_room_readiness = bool(issue.affects_room_readiness)
+        elif any(kw in desc_lower for kw in NON_READINESS_BLOCKING_KEYWORDS) and not any(kw in desc_lower for kw in READINESS_BLOCKING_KEYWORDS):
+            affects_room_readiness = False
+        elif any(kw in desc_lower for kw in READINESS_BLOCKING_KEYWORDS):
+            affects_room_readiness = True
+        elif issue.severity in (MaintenanceSeverity.CRITICAL, MaintenanceSeverity.HIGH) or str(issue.severity).upper() in ("CRITICAL", "HIGH"):
+            affects_room_readiness = True
+        elif classify_res and classify_res.get("affects_room_readiness") is not None:
+            affects_room_readiness = bool(classify_res.get("affects_room_readiness"))
+        else:
+            affects_room_readiness = False
 
         issue.affects_room_readiness = affects_room_readiness
 
@@ -225,8 +248,17 @@ class OperationsOrchestratorAgent:
                 "status": "COMPLETED",
             })
 
-        # Update room status to CLEANING since housekeeping is now active
-        self.repository.update_room_status(room_id, RoomStatus.CLEANING)
+        if on_hold_tasks:
+            # Update room status to CLEANING since housekeeping is now active
+            self.repository.update_room_status(room_id, RoomStatus.CLEANING)
+        else:
+            # No on-hold cleaning task - verify post-maintenance and transition room to READY
+            from app.agents.room_readiness_agent import RoomReadinessAgent
+            readiness_agent = RoomReadinessAgent(self.repository)
+            try:
+                readiness_agent.verify_post_maintenance(room_id)
+            except Exception:
+                self.repository.update_room_status(room_id, RoomStatus.READY)
 
         event_id = uuid4()
         result = OrchestrationResult(

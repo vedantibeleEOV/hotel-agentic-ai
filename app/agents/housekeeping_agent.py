@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Any, Union
 from uuid import uuid4
 
@@ -63,6 +64,68 @@ class HousekeepingAgent:
 
         selected_staff = available_staff[0]
         updated_task = self.repository.assign_task_to_staff(saved_task.id, selected_staff.id)
+
+        now_dt = datetime.now(timezone.utc)
+        prev_st = readiness.previous_status or "OCCUPIED"
+        p_label = {
+            "URGENT": "Critical",
+            "CRITICAL": "Critical",
+            "HIGH": "High",
+            "STANDARD": "Medium",
+            "MEDIUM": "Medium",
+            "NORMAL": "Low",
+            "LOW": "Low",
+        }.get(str(readiness.priority_level).upper(), str(readiness.priority_level).title())
+
+        if hasattr(self.repository, "log_activity"):
+            # 1. Guest checkout received
+            self.repository.log_activity(
+                task_id=saved_task.id,
+                room_id=readiness.room_id,
+                event_type="CHECKOUT_EVENT",
+                title="Guest checkout received",
+                actor_name="PMS",
+                actor_role="System",
+                action="Guest checked out",
+                outcome="Event queued",
+                timestamp=now_dt - timedelta(seconds=60),
+            )
+            # 2. Room status changed
+            self.repository.log_activity(
+                task_id=saved_task.id,
+                room_id=readiness.room_id,
+                event_type="ROOM_STATUS_CHANGED",
+                title="Room status changed",
+                actor_name="Room Readiness Agent",
+                actor_role="AI Agent",
+                action=f"{prev_st} → DIRTY",
+                outcome=f"Priority {p_label}",
+                timestamp=now_dt - timedelta(seconds=30),
+            )
+            # 3. Task created
+            self.repository.log_activity(
+                task_id=saved_task.id,
+                room_id=readiness.room_id,
+                event_type="TASK_CREATED",
+                title="Task created",
+                actor_name="Housekeeping Agent",
+                actor_role="AI Agent",
+                action="Cleaning task created",
+                outcome=f"{p_label} priority",
+                timestamp=now_dt,
+            )
+            # 4. Cleaner assigned
+            self.repository.log_activity(
+                task_id=saved_task.id,
+                room_id=readiness.room_id,
+                event_type="STAFF_ASSIGNED",
+                title="Cleaner assigned",
+                actor_name="Housekeeping Agent",
+                actor_role="AI Agent",
+                action=f"Assigned {selected_staff.name}",
+                outcome="Assigned automatically",
+                timestamp=now_dt + timedelta(seconds=1),
+            )
 
         previous_status = room_status_str
         self.repository.update_room_status(room.id, RoomStatus.CLEANING)

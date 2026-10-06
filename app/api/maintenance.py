@@ -27,6 +27,14 @@ maintenance_agent = MaintenanceAgent(repository)
     },
 )
 async def process_maintenance_issue(issue: MaintenanceIssueReport):
+    # Pre-check: Verify reporting staff exists before executing agents
+    reporting_staff = repository.get_staff_by_id(issue.reported_by_staff_id)
+    if not reporting_staff:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reporting staff not found",
+        )
+
     try:
         orchestration_result = orchestrator.process_maintenance_report(issue)
         result = maintenance_agent.report_issue(issue)

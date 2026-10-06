@@ -1,0 +1,822 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+/* Airbnb Cereal VF is a proprietary licensed font and cannot be shipped.
+   Inter is the closest open-source substitute (recommended in the DESIGN.md).
+   Loaded from Google Fonts. Replace with real Cereal VF webfonts when available. */
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+
+/* ============================================================ */
+
+/* ============================================================
+   COLORS — Airbnb design system
+   Single brand voltage (Rausch #ff385c) on a pure-white canvas.
+   ============================================================ */
+:root {
+  /* --- Brand / Accent --- */
+  --color-primary: #ff385c;          /* Rausch — the one brand color */
+  --color-primary-active: #e00b41;   /* press / pointer-down */
+  --color-primary-disabled: #ffd1da; /* pale CTA tint */
+  --color-luxe: #460479;             /* Airbnb Luxe sub-brand only */
+  --color-plus: #92174d;             /* Airbnb Plus sub-brand only */
+
+  /* --- Ink / Text --- */
+  --color-ink: #222222;        /* headlines, body, nav — never pure black */
+  --color-body: #3f3f3f;       /* long-form running text */
+  --color-muted: #6a6a6a;      /* sub-titles, inactive tabs, "View all" */
+  --color-muted-soft: #929292; /* disabled link text */
+  --color-on-primary: #ffffff; /* text on Rausch */
+  --color-on-dark: #ffffff;
+
+  /* --- Surfaces --- */
+  --color-canvas: #ffffff;        /* default page floor */
+  --color-surface-soft: #f7f7f7;  /* disabled fields, hover bg */
+  --color-surface-strong: #f2f2f2;/* circular icon-button surface */
+
+  /* --- Hairlines / Borders --- */
+  --color-hairline: #dddddd;        /* default 1px border */
+  --color-hairline-soft: #ebebeb;   /* lighter editorial divider */
+  --color-border-strong: #c1c1c1;   /* disabled outline, input outline */
+
+  /* --- Semantic --- */
+  --color-error: #c13515;        /* inline form error text */
+  --color-error-hover: #b32505;
+  --color-legal-link: #428bff;   /* links inside legal copy only */
+  --color-star: #222222;         /* star + rating numbers render in ink */
+  --color-scrim: rgba(0, 0, 0, 0.5); /* modal backdrop */
+
+  /* ----------------------------------------------------------
+     SEMANTIC ALIASES — prefer these in components
+     ---------------------------------------------------------- */
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-body);
+  --text-muted: var(--color-muted);
+  --text-on-accent: var(--color-on-primary);
+  --surface-page: var(--color-canvas);
+  --surface-card: var(--color-canvas);
+  --surface-sunken: var(--color-surface-soft);
+  --surface-control: var(--color-surface-strong);
+  --border-default: var(--color-hairline);
+  --border-subtle: var(--color-hairline-soft);
+  --accent: var(--color-primary);
+  --accent-pressed: var(--color-primary-active);
+}
+
+/* ============================================================ */
+
+/* ============================================================
+   TYPOGRAPHY — Airbnb Cereal VF (Inter substitute)
+   Modest weights; the system trusts photography over type.
+   ============================================================ */
+:root {
+  --font-sans: 'Inter', 'Airbnb Cereal VF', Circular, -apple-system, system-ui,
+    Roboto, 'Helvetica Neue', sans-serif;
+
+  /* --- Weights --- */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* --- Type scale (token: size / weight / line-height / tracking) ---
+     Mirrors the DESIGN.md hierarchy. Use the paired custom props. */
+
+  /* rating-display — the single loud moment (listing rating "4.81") */
+  --type-rating-size: 64px;   --type-rating-weight: 700; --type-rating-lh: 1.1;  --type-rating-ls: -1px;
+  /* display-xl — homepage h1 */
+  --type-display-xl-size: 28px; --type-display-xl-weight: 700; --type-display-xl-lh: 1.2; --type-display-xl-ls: 0;
+  /* display-lg — listing detail h1 */
+  --type-display-lg-size: 22px; --type-display-lg-weight: 500; --type-display-lg-lh: 1.18; --type-display-lg-ls: -0.44px;
+  /* display-md — section heads */
+  --type-display-md-size: 21px; --type-display-md-weight: 700; --type-display-md-lh: 1.3; --type-display-md-ls: 0;
+  /* display-sm — sub-section titles */
+  --type-display-sm-size: 20px; --type-display-sm-weight: 600; --type-display-sm-lh: 1.2; --type-display-sm-ls: -0.18px;
+  /* title-md — card / city titles */
+  --type-title-md-size: 16px; --type-title-md-weight: 600; --type-title-md-lh: 1.25; --type-title-md-ls: 0;
+  /* title-sm — footer column heads */
+  --type-title-sm-size: 16px; --type-title-sm-weight: 500; --type-title-sm-lh: 1.25; --type-title-sm-ls: 0;
+  /* body-md — default running text */
+  --type-body-md-size: 16px; --type-body-md-weight: 400; --type-body-md-lh: 1.5; --type-body-md-ls: 0;
+  /* body-sm — card meta, prices, dates */
+  --type-body-sm-size: 14px; --type-body-sm-weight: 400; --type-body-sm-lh: 1.43; --type-body-sm-ls: 0;
+  /* caption — search segment labels */
+  --type-caption-size: 14px; --type-caption-weight: 500; --type-caption-lh: 1.29; --type-caption-ls: 0;
+  /* caption-sm — legal line */
+  --type-caption-sm-size: 13px; --type-caption-sm-weight: 400; --type-caption-sm-lh: 1.23; --type-caption-sm-ls: 0;
+  /* badge — "Guest favorite" */
+  --type-badge-size: 11px; --type-badge-weight: 600; --type-badge-lh: 1.18; --type-badge-ls: 0;
+  /* uppercase-tag — "NEW" */
+  --type-tag-size: 8px; --type-tag-weight: 700; --type-tag-lh: 1.25; --type-tag-ls: 0.32px;
+  /* button-md / nav-link */
+  --type-button-size: 16px; --type-button-weight: 500; --type-button-lh: 1.25; --type-button-ls: 0;
+  --type-nav-size: 16px; --type-nav-weight: 600; --type-nav-lh: 1.25; --type-nav-ls: 0;
+}
+
+/* ============================================================ */
+
+/* ============================================================
+   SPACING — 4px base unit with a 2px micro-step.
+   ============================================================ */
+:root {
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-base: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  --space-section: 64px; /* major page bands — denser than typical SaaS */
+
+  /* layout */
+  --container-max: 1280px;  /* homepage / editorial */
+  --container-listing: 1080px;
+  --gutter-card: 16px;      /* property + city grid gutters */
+}
+
+/* ============================================================ */
+
+/* ============================================================
+   RADIUS — soft everywhere; no hard corner except the body grid.
+   ============================================================ */
+:root {
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;   /* buttons, inputs */
+  --radius-md: 14px;  /* property / experience cards */
+  --radius-lg: 20px;
+  --radius-xl: 32px;  /* category strip cells */
+  --radius-full: 9999px; /* search bar, orbs, hearts, pills */
+}
+
+/* ============================================================ */
+
+/* ============================================================
+   ELEVATION — one shadow tier plus the flat baseline. Depth comes
+   from photography and white-on-white separation, not layered shadows.
+   ============================================================ */
+:root {
+  /* The single shadow definition in the entire system — used on
+     hover-floated cards, the resting search bar, and dropdowns. */
+  --shadow-float: rgba(0, 0, 0, 0.02) 0 0 0 1px,
+                  rgba(0, 0, 0, 0.04) 0 2px 6px 0,
+                  rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+  --shadow-none: none;
+}
+
+/* ============================================================ */
+
+/* ============================================================
+   Airbnb Design System — global entry point.
+   Consumers link THIS file. It is a list of @import lines only.
+   ============================================================ */
+/* Airbnb Cereal VF is a proprietary licensed font and cannot be shipped.
+   Inter is the closest open-source substitute (recommended in the DESIGN.md).
+   Loaded from Google Fonts. Replace with real Cereal VF webfonts when available. */
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+/* cyrillic-ext */
+
+/* cyrillic */
+
+/* greek-ext */
+
+/* greek */
+
+/* vietnamese */
+
+/* latin-ext */
+
+/* latin */
+
+
+
+/* ============================================================
+   COLORS — Airbnb design system
+   Single brand voltage (Rausch #ff385c) on a pure-white canvas.
+   ============================================================ */
+:root {
+  /* --- Brand / Accent --- */
+  --color-primary: #ff385c;          /* Rausch — the one brand color */
+  --color-primary-active: #e00b41;   /* press / pointer-down */
+  --color-primary-disabled: #ffd1da; /* pale CTA tint */
+  --color-luxe: #460479;             /* Airbnb Luxe sub-brand only */
+  --color-plus: #92174d;             /* Airbnb Plus sub-brand only */
+
+  /* --- Ink / Text --- */
+  --color-ink: #222222;        /* headlines, body, nav — never pure black */
+  --color-body: #3f3f3f;       /* long-form running text */
+  --color-muted: #6a6a6a;      /* sub-titles, inactive tabs, "View all" */
+  --color-muted-soft: #929292; /* disabled link text */
+  --color-on-primary: #ffffff; /* text on Rausch */
+  --color-on-dark: #ffffff;
+
+  /* --- Surfaces --- */
+  --color-canvas: #ffffff;        /* default page floor */
+  --color-surface-soft: #f7f7f7;  /* disabled fields, hover bg */
+  --color-surface-strong: #f2f2f2;/* circular icon-button surface */
+
+  /* --- Hairlines / Borders --- */
+  --color-hairline: #dddddd;        /* default 1px border */
+  --color-hairline-soft: #ebebeb;   /* lighter editorial divider */
+  --color-border-strong: #c1c1c1;   /* disabled outline, input outline */
+
+  /* --- Semantic --- */
+  --color-error: #c13515;        /* inline form error text */
+  --color-error-hover: #b32505;
+  --color-legal-link: #428bff;   /* links inside legal copy only */
+  --color-star: #222222;         /* star + rating numbers render in ink */
+  --color-scrim: rgba(0, 0, 0, 0.5); /* modal backdrop */
+
+  /* ----------------------------------------------------------
+     SEMANTIC ALIASES — prefer these in components
+     ---------------------------------------------------------- */
+  --text-primary: var(--color-ink);
+  --text-secondary: var(--color-body);
+  --text-muted: var(--color-muted);
+  --text-on-accent: var(--color-on-primary);
+  --surface-page: var(--color-canvas);
+  --surface-card: var(--color-canvas);
+  --surface-sunken: var(--color-surface-soft);
+  --surface-control: var(--color-surface-strong);
+  --border-default: var(--color-hairline);
+  --border-subtle: var(--color-hairline-soft);
+  --accent: var(--color-primary);
+  --accent-pressed: var(--color-primary-active);
+}
+
+/* ============================================================
+   TYPOGRAPHY — Airbnb Cereal VF (Inter substitute)
+   Modest weights; the system trusts photography over type.
+   ============================================================ */
+:root {
+  --font-sans: 'Inter', 'Airbnb Cereal VF', Circular, -apple-system, system-ui,
+    Roboto, 'Helvetica Neue', sans-serif;
+
+  /* --- Weights --- */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* --- Type scale (token: size / weight / line-height / tracking) ---
+     Mirrors the DESIGN.md hierarchy. Use the paired custom props. */
+
+  /* rating-display — the single loud moment (listing rating "4.81") */
+  --type-rating-size: 64px;   --type-rating-weight: 700; --type-rating-lh: 1.1;  --type-rating-ls: -1px;
+  /* display-xl — homepage h1 */
+  --type-display-xl-size: 28px; --type-display-xl-weight: 700; --type-display-xl-lh: 1.2; --type-display-xl-ls: 0;
+  /* display-lg — listing detail h1 */
+  --type-display-lg-size: 22px; --type-display-lg-weight: 500; --type-display-lg-lh: 1.18; --type-display-lg-ls: -0.44px;
+  /* display-md — section heads */
+  --type-display-md-size: 21px; --type-display-md-weight: 700; --type-display-md-lh: 1.3; --type-display-md-ls: 0;
+  /* display-sm — sub-section titles */
+  --type-display-sm-size: 20px; --type-display-sm-weight: 600; --type-display-sm-lh: 1.2; --type-display-sm-ls: -0.18px;
+  /* title-md — card / city titles */
+  --type-title-md-size: 16px; --type-title-md-weight: 600; --type-title-md-lh: 1.25; --type-title-md-ls: 0;
+  /* title-sm — footer column heads */
+  --type-title-sm-size: 16px; --type-title-sm-weight: 500; --type-title-sm-lh: 1.25; --type-title-sm-ls: 0;
+  /* body-md — default running text */
+  --type-body-md-size: 16px; --type-body-md-weight: 400; --type-body-md-lh: 1.5; --type-body-md-ls: 0;
+  /* body-sm — card meta, prices, dates */
+  --type-body-sm-size: 14px; --type-body-sm-weight: 400; --type-body-sm-lh: 1.43; --type-body-sm-ls: 0;
+  /* caption — search segment labels */
+  --type-caption-size: 14px; --type-caption-weight: 500; --type-caption-lh: 1.29; --type-caption-ls: 0;
+  /* caption-sm — legal line */
+  --type-caption-sm-size: 13px; --type-caption-sm-weight: 400; --type-caption-sm-lh: 1.23; --type-caption-sm-ls: 0;
+  /* badge — "Guest favorite" */
+  --type-badge-size: 11px; --type-badge-weight: 600; --type-badge-lh: 1.18; --type-badge-ls: 0;
+  /* uppercase-tag — "NEW" */
+  --type-tag-size: 8px; --type-tag-weight: 700; --type-tag-lh: 1.25; --type-tag-ls: 0.32px;
+  /* button-md / nav-link */
+  --type-button-size: 16px; --type-button-weight: 500; --type-button-lh: 1.25; --type-button-ls: 0;
+  --type-nav-size: 16px; --type-nav-weight: 600; --type-nav-lh: 1.25; --type-nav-ls: 0;
+}
+
+/* ============================================================
+   SPACING — 4px base unit with a 2px micro-step.
+   ============================================================ */
+:root {
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-base: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  --space-section: 64px; /* major page bands — denser than typical SaaS */
+
+  /* layout */
+  --container-max: 1280px;  /* homepage / editorial */
+  --container-listing: 1080px;
+  --gutter-card: 16px;      /* property + city grid gutters */
+}
+
+/* ============================================================
+   RADIUS — soft everywhere; no hard corner except the body grid.
+   ============================================================ */
+:root {
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;   /* buttons, inputs */
+  --radius-md: 14px;  /* property / experience cards */
+  --radius-lg: 20px;
+  --radius-xl: 32px;  /* category strip cells */
+  --radius-full: 9999px; /* search bar, orbs, hearts, pills */
+}
+
+/* ============================================================
+   ELEVATION — one shadow tier plus the flat baseline. Depth comes
+   from photography and white-on-white separation, not layered shadows.
+   ============================================================ */
+:root {
+  /* The single shadow definition in the entire system — used on
+     hover-floated cards, the resting search bar, and dropdowns. */
+  --shadow-float: rgba(0, 0, 0, 0.02) 0 0 0 1px,
+                  rgba(0, 0, 0, 0.04) 0 2px 6px 0,
+                  rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+  --shadow-none: none;
+}
+
+/* ============================================================ */
+
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:var(--font-sans);color:var(--color-ink);background:#f7f7f7;font-size:14px;line-height:1.43;-webkit-font-smoothing:antialiased}
+a{color:var(--color-ink);text-decoration:underline}a:hover{color:var(--color-primary-active)}
+button{font:inherit;color:inherit}
+
+/* Shared Dark Button Design Token */
+.btn-dark {
+  background-color: #222222 !important;
+  color: #ffffff !important;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-dark:hover:not(:disabled) {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+
+.btn-dark:active:not(:disabled) {
+  background-color: #111111 !important;
+  color: #ffffff !important;
+  transform: scale(0.98);
+}
+
+.btn-dark:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  color: #ffffff !important;
+}
+
+.btn-dark *,
+.btn-dark svg {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+/* Universal safeguard for all dark buttons across the application */
+button[class*="bg-[#222]"],
+button[class*="bg-black"],
+button[class*="bg-neutral-900"],
+button[class*="bg-slate-900"],
+button[class*="bg-gray-900"],
+button[class*="bg-zinc-900"] {
+  color: #ffffff !important;
+}
+
+button[class*="bg-[#222]"] svg,
+button[class*="bg-black"] svg,
+button[class*="bg-neutral-900"] svg,
+button[class*="bg-slate-900"] svg,
+button[class*="bg-gray-900"] svg,
+button[class*="bg-zinc-900"] svg {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+button[class*="bg-[#222]"]:disabled,
+button[class*="bg-black"]:disabled,
+button[class*="bg-neutral-900"]:disabled,
+button[class*="bg-slate-900"]:disabled,
+button[class*="bg-gray-900"]:disabled,
+button[class*="bg-zinc-900"]:disabled {
+  color: #ffffff !important;
+}
+
+/* Base and semantic button styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+.btn-primary {
+  background: #ff385c !important;
+  color: #ffffff !important;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #e00b41 !important;
+}
+.btn-success {
+  background: #10b981 !important;
+  color: #ffffff !important;
+}
+.btn-success:hover:not(:disabled) {
+  background: #059669 !important;
+}
+.btn-danger {
+  background: #ef4444 !important;
+  color: #ffffff !important;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626 !important;
+}
+.btn-secondary {
+  background: #f2f2f2 !important;
+  color: #222222 !important;
+  border: 1px solid #dddddd !important;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #e5e5e5 !important;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn svg {
+  stroke: currentColor !important;
+}
+input[type=checkbox]{accent-color:#222;width:16px;height:16px}
+.row{display:flex;align-items:center}.col{display:flex;flex-direction:column}
+.g4{gap:4px}.g6{gap:6px}.g8{gap:8px}.g12{gap:12px}.g16{gap:16px}.g20{gap:20px}.g24{gap:24px}
+.small{font-size:13px;line-height:1.35}.muted{color:var(--color-muted)}.num{font-variant-numeric:tabular-nums}.rel{position:relative}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;line-height:1}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.pulse{animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(23,105,63,.45)}70%{box-shadow:0 0 0 6px rgba(23,105,63,0)}100%{box-shadow:0 0 0 0 rgba(23,105,63,0)}}
+.bar{height:6px;background:#ebebeb;border-radius:99px;overflow:hidden;width:100%}.bar i{display:block;height:100%;border-radius:99px;transition:width .6s ease}
+.link{background:none;border:none;padding:0;cursor:pointer;text-decoration:underline;font-weight:500;color:var(--color-ink)}
+.link:hover{color:var(--color-primary-active)}
+/* shell */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}
+.side{background:#fff;border-right:1px solid var(--color-hairline);position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:16px 12px;gap:2px;overflow:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 20px}.brand b{font-size:16px}
+.logo{width:32px;height:32px;border-radius:9px;background:#222;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav{display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border-radius:8px;color:var(--color-body);font-weight:500;cursor:pointer;border:none;background:none;width:100%;text-align:left;font-size:14px}
+.nav:hover{background:#f2f2f2;color:var(--color-ink)}.nav.on{background:#222;color:#fff}
+.nav .ct{margin-left:auto;background:var(--color-primary);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;padding:0 6px}
+.sidefoot{border-top:1px solid var(--color-hairline);padding:16px 12px 4px}
+.main{min-width:0;display:flex;flex-direction:column}
+.top{height:64px;background:#fff;border-bottom:1px solid var(--color-hairline);display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:30}
+.tbtn{display:flex;align-items:center;gap:10px;height:44px;padding:0 10px;border-radius:10px;border:none;background:none;cursor:pointer;text-align:left}
+.tbtn b,.tbtn span{white-space:nowrap}.tbtn:hover{background:#f7f7f7}.tbtn.status{border:1px solid var(--color-hairline);height:36px;border-radius:99px;padding:0 14px;font-size:13px;font-weight:500}.tbtn.status.warn{background:#fcefd6;border-color:#f1d49b;color:#874e00}
+.search{display:flex;align-items:center;gap:8px;height:40px;border:1px solid var(--color-hairline);border-radius:99px;padding:0 16px;width:min(360px,30vw);background:#fff}
+.search.sm{height:40px;width:220px;border-radius:8px}
+.search input{border:none;outline:none;font:inherit;flex:1;min-width:0;background:none}
+.search:focus-within{border-color:#222;box-shadow:0 0 0 1px #222}
+.ib{width:40px;height:40px;border-radius:99px;border:1px solid var(--color-hairline);background:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;position:relative;flex-shrink:0}
+.ib:hover{background:#f7f7f7}.ib.sm{width:28px;height:28px;border:none;background:none}.ib.critb{border-color:#c13515;color:#c13515}
+.badge{position:absolute;top:-4px;right:-6px;background:var(--color-primary);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff}
+.pop{position:absolute;top:52px;background:#fff;border-radius:14px;box-shadow:var(--shadow-float);border:1px solid var(--color-hairline-soft);padding:8px;z-index:50;display:flex;flex-direction:column}
+.poph{font-size:12px;font-weight:600;color:var(--color-muted);padding:8px 10px}
+.popi{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border-radius:8px;border:none;background:none;cursor:pointer;text-align:left;width:100%}
+.popi:hover{background:#f7f7f7}
+.banner{display:flex;align-items:center;gap:12px;padding:10px 24px;font-size:14px}
+.banner.off{background:#222;color:#fff}.banner.ai{background:#fcefd6;color:#5e3600;border-bottom:1px solid #f1d49b}
+.page{padding:24px 28px 48px;width:100%;max-width:1560px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.pt{font-size:28px;font-weight:600;margin:0;letter-spacing:-.4px;line-height:1.2}
+.phead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 20px 12px}
+.ptitle{font-size:16px;font-weight:600}
+.kgrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:12px}.kgrid.k5{grid-template-columns:repeat(5,minmax(0,1fr))}.kgrid.k6{grid-template-columns:repeat(6,minmax(0,1fr))}.kgrid.k7{grid-template-columns:repeat(7,minmax(0,1fr))}
+.g2-1{display:grid;grid-template-columns:minmax(0,2fr) minmax(320px,1fr);gap:20px;align-items:start}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+.skcard{background:#fff;border:1px solid var(--color-hairline);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.skel{background:linear-gradient(90deg,#f0f0f0 25%,#e6e6e6 50%,#f0f0f0 75%);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+/* controls */
+.seg{display:inline-flex;background:#f2f2f2;border-radius:10px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:none;background:none;height:34px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--color-body);white-space:nowrap}
+.seg button:hover{color:var(--color-ink)}.seg button.on{background:#fff;color:var(--color-ink);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.selw{position:relative;display:inline-flex;flex-direction:column;gap:6px}.selw>span{font-size:13px;font-weight:500;color:var(--color-muted)}
+.selw select{appearance:none;height:40px;border:1px solid var(--color-hairline);border-radius:8px;padding:0 34px 0 12px;font:inherit;background:#fff;cursor:pointer;color:var(--color-ink)}
+.selw select:focus{outline:none;border-color:#222;box-shadow:0 0 0 1px #222}.selw svg{position:absolute;right:12px;bottom:13px;pointer-events:none}
+.chip{white-space:nowrap;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:99px;border:1px solid var(--color-hairline);background:#fff;cursor:pointer;font-size:13px;font-weight:500}
+.chip:hover{border-color:#222}.chip.on{background:#222;color:#fff;border-color:#222}
+.fbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.stchip{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--color-hairline);background:#fff;cursor:pointer;font-size:13px}
+.stchip.on{border-color:#222;box-shadow:0 0 0 1px #222}.stchip b{font-weight:600}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid transparent}
+.empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 16px;text-align:center;line-height:1.4}
+.eicon{width:44px;height:44px;border-radius:99px;background:#f2f2f2;display:flex;align-items:center;justify-content:center}
+.avph{border-radius:99px;background:#f2f2f2;display:inline-flex;align-items:center;justify-content:center;border:1px dashed #c1c1c1;flex-shrink:0}
+.alert{display:flex;gap:10px;padding:12px 14px;border-radius:10px;align-items:flex-start;line-height:1.45}
+.alert.warn{background:#fcefd6;color:#5e3600}.alert.crit{background:#fde9e5;color:#8a2410}.alert.ok{background:#e4f3ea;color:#10522f}
+.alert.big{padding:16px 18px}.alert.crit.big{background:#c13515;color:#fff}
+.quote{font-size:16px;line-height:1.5;font-style:italic;color:var(--color-ink);padding:14px 16px;background:#f7f7f7;border-radius:10px}
+.dl{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px 16px;font-size:14px}.dl>div:nth-child(odd){color:var(--color-muted)}
+.dl.tight{grid-template-columns:96px minmax(0,1fr);gap:6px 12px;font-size:13px}
+.aigrid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:16px 20px}.aigrid .k,.resgrid .k{color:var(--color-muted);font-size:13px;font-weight:500;padding-top:2px}
+.resgrid{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px 16px;padding:16px;border:1px solid var(--color-hairline);border-radius:12px;align-items:center}
+.ovbox{border:1px solid #222;border-radius:12px;padding:16px}
+/* overlays */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:60;display:flex;justify-content:flex-end;animation:fade .15s}
+.scrim.center{justify-content:center;align-items:flex-start;padding-top:8vh}
+@keyframes fade{from{opacity:0}}
+.drawer{background:#fff;height:100%;max-width:100vw;display:flex;flex-direction:column;box-shadow:var(--shadow-float);animation:slide .2s ease}
+@keyframes slide{from{transform:translateX(24px);opacity:.4}}
+.dhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:20px 24px 16px;border-bottom:1px solid var(--color-hairline-soft)}
+.modal .dhead{border:none}.dhead>.col{flex:1;line-height:1.3}
+.dbody{padding:20px 24px;overflow:auto;flex:1}.dfoot{border-top:1px solid var(--color-hairline);padding:14px 24px;background:#fff}
+.modal{background:#fff;border-radius:20px;max-width:calc(100vw - 32px);max-height:84vh;overflow:auto;box-shadow:var(--shadow-float);animation:fade .15s}
+.rrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:none;border-bottom:1px solid var(--color-hairline-soft);background:#fff;cursor:pointer;width:100%}
+.rrow:hover:not(:disabled){background:#f7f7f7}.rrow:disabled{cursor:default;opacity:.55}.rrow:last-child{border-bottom:none}
+.trow{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--color-hairline);border-radius:10px;background:#fff;cursor:pointer;width:100%;text-align:left}
+.trow:hover{border-color:#222}
+.note{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:12px;border:1px solid var(--color-hairline);background:#fff;cursor:pointer;width:100%;text-align:left}
+.note:hover{border-color:#222}.note.read{opacity:.7}.note.ncrit{border:2px solid #c13515;background:#fff8f6}
+.nic{width:32px;height:32px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:80;width:380px;max-width:calc(100vw - 40px)}
+.toast{display:flex;gap:12px;align-items:flex-start;background:#222;color:#fff;border-radius:12px;padding:14px 14px 14px 16px;box-shadow:var(--shadow-float);animation:slide .2s}
+.toast .ib{color:#fff}.toast.critical{background:#c13515}.toast.warning{background:#fff;color:#5e3600;border:1px solid #f1d49b}.toast.warning .ib{color:#5e3600}
+/* timeline */
+.tl{display:flex;flex-direction:column}
+.tli{display:grid;grid-template-columns:44px 10px minmax(0,1fr);gap:10px;padding:8px 0;position:relative}
+.tli:not(:last-child)::after{content:"";position:absolute;left:58px;top:24px;bottom:-8px;width:1px;background:var(--color-hairline)}
+.tlt{font-size:12px;color:var(--color-muted);padding-top:2px}.tld{width:10px;height:10px;border-radius:50%;margin-top:5px;position:relative;z-index:1;box-shadow:0 0 0 3px #fff}
+/* dashboard */
+.att{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--color-hairline-soft)}.att:last-child{border-bottom:none}
+.att.acrit{background:#fff8f6;margin:0 -20px;padding:14px 20px;border-bottom:1px solid #f6d3cb}
+.lane{display:flex;flex-direction:column;gap:10px}.lanet{font-size:14px}
+.stages{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:4px}
+.stage{flex:1 1 0;min-width:120px;border:1px solid var(--color-hairline);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:#fff}
+.stage.swarn{border-color:#f3c3a2;background:#fffaf6}
+.conn{display:flex;align-items:center;padding:0 2px;flex-shrink:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.rchip{display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 7px;border-radius:6px;border:1px solid;font-size:12px;font-weight:600;cursor:pointer}
+.rchip:hover{filter:brightness(.95)}.rchip.sm{width:14px;height:12px;padding:0;border-radius:3px;cursor:default}
+.rchip.fresh{animation:pop .8s ease 2}
+@keyframes pop{50%{transform:scale(1.18);box-shadow:0 0 0 3px rgba(34,34,34,.18)}}
+.frow{display:flex;align-items:center;gap:10px}.fcells{display:grid;grid-template-columns:repeat(20,minmax(0,1fr));gap:4px;flex:1}
+.fcell{height:34px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;position:relative;min-width:0;padding:0}
+.fcell:hover{box-shadow:0 0 0 2px #222}
+.mk{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#653886;display:inline-block}
+/* rooms */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:10px}
+.rtile{background:#fff;border:1px solid var(--color-hairline);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;text-align:left;min-width:0}
+.rtile:hover{box-shadow:var(--shadow-float)}.rtile.tcrit{border:2px solid #c13515}
+.tscroll{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th{font-size:12px;color:var(--color-muted);font-weight:600;text-align:left;padding:12px 14px;border-bottom:1px solid var(--color-hairline);white-space:nowrap;background:#fff}
+.tbl th.sortable{cursor:pointer}.tbl th.sortable:hover{color:var(--color-ink)}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--color-hairline-soft);vertical-align:middle}
+.tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:#fafafa}.tbl tr.sel td{background:#f5f5f5}.tbl tr.hl td{background:#fff8f2}.tbl tr.hlc td{background:#fff5f3}
+.aiev{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px solid var(--color-hairline-soft)}.aiev:last-child{border:none}
+.bulk{display:flex;align-items:center;gap:12px;background:#222;color:#fff;padding:10px 16px;border-radius:12px;flex-wrap:wrap}
+/* housekeeping */
+.hkwrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+.board{display:grid;grid-template-columns:repeat(6,minmax(200px,1fr));gap:12px;overflow-x:auto;padding-bottom:8px}
+.bcol{background:#efefef;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:10px;min-height:200px}
+.bhead{display:flex;flex-direction:column;gap:4px;padding:4px 4px 2px}
+.bempty{border:1px dashed #c1c1c1;border-radius:10px;padding:16px;text-align:center}
+.hkc{background:#fff;border:1px solid var(--color-hairline);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;width:100%}
+.hkc .row>span{white-space:nowrap}.hkc:hover{box-shadow:var(--shadow-float)}.hkc.over{border:2px solid #c13515}
+/* maintenance */
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.icard{background:#fff;border:1px solid var(--color-hairline);border-radius:14px;padding:0;text-align:left;cursor:pointer;overflow:hidden;display:flex;flex-direction:column}
+.icard:hover{box-shadow:var(--shadow-float)}.icard.icrit{border:2px solid #c13515}
+.icbar{background:#c13515;color:#fff;font-size:13px;font-weight:600;padding:8px 14px;display:flex;align-items:center;gap:8px}
+.icbody{padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.desc{font-size:15px;line-height:1.45}
+.flabel{font-size:var(--type-caption-size);font-weight:var(--type-caption-weight);color:var(--color-muted)}
+.ta{border:1px solid var(--color-hairline);border-radius:8px;padding:14px;font:inherit;font-size:16px;line-height:1.5;resize:vertical;outline:none;min-height:120px}
+.ta:focus{border:2px solid #222;padding:13px}.ta.err{border:2px solid var(--color-error);padding:13px}
+.spin{width:28px;height:28px;border:3px solid #ebebeb;border-top-color:#222;border-radius:50%;animation:rot .8s linear infinite;flex-shrink:0}.spin.sm{width:14px;height:14px;border-width:2px}
+@keyframes rot{to{transform:rotate(360deg)}}
+.pstep{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:15px;transition:all .2s}
+.pstep.wait{color:#929292}.pstep.act{background:#f7f7f7;font-weight:600}.pstep.done{color:var(--color-ink)}
+.pdot{width:22px;height:22px;border-radius:99px;border:1.5px solid #c1c1c1;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pstep.done .pdot{background:#222;border-color:#222;color:#fff}.pstep.act .pdot{border-color:transparent}
+/* ai ops */
+.agrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.orch{display:grid;grid-template-columns:300px minmax(0,1fr);border-top:1px solid var(--color-hairline-soft)}
+.trlist{border-right:1px solid var(--color-hairline-soft);padding:8px;display:flex;flex-direction:column;gap:2px;max-height:560px;overflow:auto}
+.tri{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;border:none;background:none;cursor:pointer;width:100%}
+.tri:hover{background:#f7f7f7}.tri.on{background:#f2f2f2}
+.flow{display:flex;flex-direction:column}
+.fnode{display:grid;grid-template-columns:40px minmax(0,1fr) 64px;gap:16px}
+.frail{display:flex;flex-direction:column;align-items:center}
+.fdot{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#222;border:2px solid #222;flex-shrink:0;transition:all .3s}
+.fnode.wait .fdot{background:#fff;border:2px dashed #c1c1c1}.fnode.act .fdot{background:#fff;border:2px solid #222;animation:ring 1.4s infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(34,34,34,.3)}70%{box-shadow:0 0 0 8px rgba(34,34,34,0)}100%{box-shadow:0 0 0 0 rgba(34,34,34,0)}}
+.fnode.act .fdot svg{stroke:#222}
+.fline{width:2px;flex:1;min-height:28px;background:#e2e2e2;margin:4px 0}.fline.full{background:#222}
+.fline.flowing{background:repeating-linear-gradient(180deg,#222 0 6px,transparent 6px 12px);background-size:2px 12px;animation:flowd .6s linear infinite}
+@keyframes flowd{to{background-position:0 12px}}
+.fcont{padding:0 0 24px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.flabel2{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--color-muted)}
+.fnode.wait .fcont{opacity:.6}
+/* reports */
+.bars{display:flex;align-items:flex-end;gap:10px;position:relative;padding-top:8px}
+.bc{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
+.bstack{flex:1;width:100%;max-width:44px;display:flex;flex-direction:column-reverse;justify-content:flex-start;gap:2px}
+.bstack i{display:block;width:100%;border-radius:4px}
+.tgt{position:absolute;left:0;right:0;border-top:1.5px dashed #929292;z-index:1;margin-bottom:24px}
+.tgt span{position:absolute;right:0;top:-18px;font-size:11px;color:var(--color-muted);background:#fff;padding:0 4px}
+/* mobile */
+.mstage{min-height:100vh;display:flex;align-items:center;justify-content:center;gap:56px;padding:32px;background:#f2f2f2;flex-wrap:wrap}
+.mside{width:340px}
+.phone{width:390px;height:844px;border-radius:52px;background:#222;padding:12px;box-shadow:0 24px 60px rgba(0,0,0,.18);flex-shrink:0}
+.pscreen{width:100%;height:100%;border-radius:42px;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+.psb{display:flex;justify-content:space-between;padding:16px 28px 6px;font-size:14px}
+.phead2{padding:8px 20px 14px;border-bottom:1px solid var(--color-hairline-soft)}
+.availt{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:99px;border:1px solid var(--color-hairline);background:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.pbody{flex:1;overflow:auto;padding:16px 20px 24px;background:#f7f7f7}
+.ptabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--color-hairline);padding:8px 8px 22px;background:#fff}
+.ptabs button{border:none;background:none;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--color-muted);cursor:pointer;min-height:48px;justify-content:center}
+.ptabs button.on{color:var(--color-ink)}.ptabs .badge{top:-6px;right:-10px}
+.mcard{background:#fff;border:1px solid var(--color-hairline);border-radius:16px;overflow:hidden}.mcard.mcrit{border:2px solid #c13515}.mcard.mover{border-color:#c13515}
+.mbtn{flex:1;min-height:48px;border-radius:10px;border:1px solid #c1c1c1;background:#fff;font-size:15px;font-weight:600;cursor:pointer;width:100%}
+.mbtn.pri{background:var(--color-primary);color:#fff;border:none}.mbtn.pri:active{background:var(--color-primary-active)}
+.mcritalert{display:flex;gap:10px;align-items:center;background:#c13515;color:#fff;border:none;border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left}
+/* responsive */
+@media (max-width:1360px){.kgrid{grid-template-columns:repeat(4,minmax(0,1fr))}.kgrid.k7{grid-template-columns:repeat(4,minmax(0,1fr))}.agrid{grid-template-columns:repeat(2,minmax(0,1fr))}.hkwrap{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1100px){.app{grid-template-columns:68px minmax(0,1fr)}.side .nl,.side .brand .col,.sidefoot{display:none}.nav{justify-content:center;padding:0;position:relative}.nav .ct{position:absolute;top:2px;right:4px;margin:0}.brand{justify-content:center;padding:4px 0 20px}.g2-1,.g2{grid-template-columns:minmax(0,1fr)}.hide-md{display:none}.kgrid.k5,.kgrid.k6{grid-template-columns:repeat(3,minmax(0,1fr))}.orch{grid-template-columns:minmax(0,1fr)}.trlist{border-right:none;border-bottom:1px solid var(--color-hairline-soft);max-height:220px}.search{width:auto;flex:1}}
+@media (max-width:720px){.app{grid-template-columns:minmax(0,1fr)}.side{display:none}.page{padding:16px}.kgrid,.kgrid.k5,.kgrid.k6,.kgrid.k7,.agrid{grid-template-columns:repeat(2,minmax(0,1fr))}.top{padding:0 12px;gap:6px}.fcells{grid-template-columns:repeat(10,minmax(0,1fr))}}
+
+/* ============================================================
+   UI ANIMATIONS & RESPONSIVE UTILITIES
+   ============================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-scale-up {
+  animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}

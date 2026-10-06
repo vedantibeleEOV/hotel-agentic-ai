@@ -4,7 +4,7 @@ from pathlib import Path
 # Ensure project root is in sys.path when script is executed directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -18,5 +18,5 @@ class CheckoutEvent(BaseModel):
     property_id: int = Field(default=1, gt=0)
     room_id: int = Field(..., gt=0)
     reservation_id: int = Field(..., gt=0)
-    checkout_time: datetime = Field(default_factory=datetime.utcnow)
+    checkout_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

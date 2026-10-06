@@ -163,6 +163,29 @@ class MaintenanceAgent:
             updated_incident.operational_task_id = saved_task.id
             self.repository.save_maintenance_incident(updated_incident)
 
+            if hasattr(self.repository, "log_activity"):
+                cat_val = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
+                self.repository.log_activity(
+                    task_id=saved_task.id,
+                    room_id=issue.room_id,
+                    event_type="TASK_CREATED",
+                    title="Task created",
+                    actor_name="Maintenance Agent",
+                    actor_role="AI Agent",
+                    action=f"Maintenance task created · {cat_val}",
+                    outcome=f"{priority_level} priority",
+                )
+                self.repository.log_activity(
+                    task_id=saved_task.id,
+                    room_id=issue.room_id,
+                    event_type="STAFF_ASSIGNED",
+                    title="Technician assigned",
+                    actor_name="Maintenance Agent",
+                    actor_role="AI Agent",
+                    action=f"Assigned {technician.name}",
+                    outcome="Assigned automatically",
+                )
+
             self.activity_logs.append({
                 "agent": "MAINTENANCE_AGENT",
                 "action": "CREATE_AND_ASSIGN_INCIDENT",

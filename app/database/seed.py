@@ -5,7 +5,8 @@ from pathlib import Path
 # Ensure project root is in sys.path when executed directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+from app.database.base import Base
 from app.database import (
     GuestEntity,
     ReservationEntity,
@@ -15,6 +16,84 @@ from app.database import (
 )
 
 
+def seed_rooms(session) -> tuple[int, int]:
+    """Seed exactly 50 hotel rooms across floors 1 to 5 (10 rooms per floor)."""
+    inserted = 0
+    skipped = 0
+
+    # 1. Ensure existing fixed rooms 405 (ID 1) and 406 (ID 2) on Floor 4 exist
+    fixed_rooms = [
+        {
+            "id": 1,
+            "property_id": 1,
+            "room_number": "405",
+            "floor": 4,
+            "room_type": "DELUXE",
+            "status": "OCCUPIED",
+        },
+        {
+            "id": 2,
+            "property_id": 1,
+            "room_number": "406",
+            "floor": 4,
+            "room_type": "STANDARD",
+            "status": "READY",
+        },
+    ]
+    for item in fixed_rooms:
+        existing = session.get(RoomEntity, item["id"])
+        if not existing:
+            session.add(RoomEntity(**item))
+            inserted += 1
+        else:
+            existing.status = item["status"]
+            existing.room_type = item["room_type"]
+            existing.floor = item["floor"]
+            existing.room_number = item["room_number"]
+            skipped += 1
+
+    session.flush()
+
+    # Query all existing room_numbers for property_id=1 to guarantee idempotency
+    existing_rooms_stmt = select(RoomEntity.room_number).where(RoomEntity.property_id == 1)
+    existing_numbers = set(session.execute(existing_rooms_stmt).scalars().all())
+
+    # 2. Add or reset remaining 48 rooms across floors 1 to 5
+    for floor in range(1, 6):
+        for room_idx in range(1, 11):
+            room_number = f"{floor}{room_idx:02d}"
+            if room_number in ("405", "406"):
+                continue
+
+            room_type = "DELUXE" if room_idx <= 5 else "STANDARD"
+            status = "DIRTY" if room_idx in (3, 7) else "READY"
+
+            if room_number not in existing_numbers:
+                session.add(
+                    RoomEntity(
+                        property_id=1,
+                        room_number=room_number,
+                        floor=floor,
+                        room_type=room_type,
+                        status=status,
+                    )
+                )
+                existing_numbers.add(room_number)
+                inserted += 1
+            else:
+                existing_room = session.execute(
+                    select(RoomEntity).where(RoomEntity.property_id == 1, RoomEntity.room_number == room_number)
+                ).scalar_one_or_none()
+                if existing_room:
+                    existing_room.status = status
+                    existing_room.room_type = room_type
+                    existing_room.floor = floor
+                skipped += 1
+
+    session.flush()
+    return inserted, skipped
+
+
 def seed_db() -> dict:
     """Seed initial hotel operations mock data into PostgreSQL idempotently."""
     session = SessionLocal()
@@ -22,38 +101,24 @@ def seed_db() -> dict:
     skipped_counts = {"rooms": 0, "guests": 0, "reservations": 0, "staff": 0}
 
     try:
-        # Clear maintenance incidents and operational tasks on reset
+        from app.database.connection import engine
+        Base.metadata.create_all(bind=engine)
+        session.execute(text("ALTER TABLE operational_tasks ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;"))
+        # Clear maintenance incidents, task activities, and operational tasks on reset
+        session.execute(text("DELETE FROM task_activities;"))
         session.execute(text("DELETE FROM maintenance_incidents;"))
         session.execute(text("DELETE FROM operational_tasks;"))
+        # Clear any test-injected non-seed rows to avoid leaks
+        session.execute(text("DELETE FROM reservations WHERE id NOT IN (5001, 5002, 5003, 5004, 5005);"))
+        session.execute(text("DELETE FROM guests WHERE id NOT IN (101, 102);"))
+        session.execute(text("DELETE FROM staff WHERE id NOT IN (201, 202, 203, 301, 302);"))
         session.commit()
 
+
         # 1. Rooms Seed Data
-        rooms_data = [
-            {
-                "id": 1,
-                "property_id": 1,
-                "room_number": "405",
-                "floor": 4,
-                "room_type": "DELUXE",
-                "status": "OCCUPIED",
-            },
-            {
-                "id": 2,
-                "property_id": 1,
-                "room_number": "406",
-                "floor": 4,
-                "room_type": "STANDARD",
-                "status": "READY",
-            },
-        ]
-        for item in rooms_data:
-            existing = session.get(RoomEntity, item["id"])
-            if not existing:
-                session.add(RoomEntity(**item))
-                inserted_counts["rooms"] += 1
-            else:
-                existing.status = item["status"]
-                skipped_counts["rooms"] += 1
+        rooms_inserted, rooms_skipped = seed_rooms(session)
+        inserted_counts["rooms"] += rooms_inserted
+        skipped_counts["rooms"] += rooms_skipped
 
         # 2. Guests Seed Data
         guests_data = [

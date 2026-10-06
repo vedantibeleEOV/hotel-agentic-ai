@@ -23,9 +23,13 @@ hotel-operations-ai/
 │   ├── schemas/            # Pydantic input/output schemas
 │   └── database/           # DB connections and repositories
 │
-├── dashboard/              # Streamlit management dashboard
+├── frontend/               # React + Vite Multi-Agent Operations Dashboard
+│   ├── src/                # Components, API client, & Styles
+│   ├── package.json
+│   └── Dockerfile
 ├── tests/                  # Unit and integration tests
 ├── scripts/                # Utility & demo seed scripts
+├── docker-compose.yml      # PostgreSQL + LLM + FastAPI + React Frontend
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -33,15 +37,24 @@ hotel-operations-ai/
 
 ## Quick Start
 
-### 1. Setup Virtual Environment & Install Dependencies
+### 1. Run Backend (FastAPI)
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+.venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-### 2. Run API Server
-```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 API Documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 2. Run Frontend (React + Vite)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Operations Dashboard: [http://localhost:5173](http://localhost:5173)
+
+### 3. Run Full-Stack with Docker Compose
+```bash
+docker-compose up --build
+```

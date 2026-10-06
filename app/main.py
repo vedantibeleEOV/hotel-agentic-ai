@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.checkout import housekeeping_agent, repository, router as checkout_router
+from app.api.housekeeping import router as housekeeping_router
 from app.api.maintenance import maintenance_agent, router as maintenance_router
+from app.api.rooms import router as rooms_router
 from app.api.tasks import router as tasks_router
 from app.api.v1.router import api_router
 from app.config import settings
@@ -54,7 +56,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Failed to initialize repositories or agents")
 
     # Step d: Registering API routers
-    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue, /api/tasks)", flush=True)
+    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue, /api/tasks, /api/rooms, /api/housekeeping)", flush=True)
 
     # Step e: Application ready
     print(f"Application ready to accept requests on http://{settings.HOST}:{settings.PORT}", flush=True)
@@ -76,9 +78,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.get("/api/v1/health")
+def health_check():
+    return {"status": "ok"}
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "*",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,7 +120,22 @@ app.include_router(
     tags=["Tasks"]
 )
 
+# Mount Rooms router
+app.include_router(
+    rooms_router,
+    prefix="/api",
+    tags=["Rooms"]
+)
+
+# Mount Housekeeping router
+app.include_router(
+    housekeeping_router,
+    prefix="/api",
+    tags=["Housekeeping"]
+)
+
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG, log_level="warning")
+

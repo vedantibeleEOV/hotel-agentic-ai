@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -15,5 +15,6 @@ class OperationalTask(BaseModel):
     priority_level: str
     status: TaskStatus = TaskStatus.PENDING
     assigned_staff_id: Optional[int] = None
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: Optional[datetime] = None
     notes: Optional[str] = None

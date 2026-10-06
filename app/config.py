@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8000
 
+    # Current User Configuration for Human Overrides
+    CURRENT_USER_NAME: str = "Amit Shah"
+    CURRENT_USER_ROLE: str = "Hotel Manager"
+
 
     # Docker LLM & Provider Configuration
     OPENAI_API_KEY: str = ""

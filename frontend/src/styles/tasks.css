@@ -1,0 +1,93 @@
+/* tasks.css - Styling for Tasks page matching the Voyage Ops Prototype */
+
+.tasks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Prototype Pill Tokens */
+.pill-crit {
+  background-color: #fff0f2;
+  color: #ff385c;
+  border: 1px solid #ffccd3;
+}
+
+.pill-high {
+  background-color: #fff4e5;
+  color: #b35300;
+  border: 1px solid #ffe1b8;
+}
+
+.pill-medium {
+  background-color: #f0f4f8;
+  color: #334e68;
+  border: 1px solid #d9e2ec;
+}
+
+.pill-low {
+  background-color: #f5f5f5;
+  color: #6a6a6a;
+  border: 1px solid #e5e5e5;
+}
+
+.pill-assigned {
+  background-color: #e6f6ff;
+  color: #006699;
+  border: 1px solid #bae3ff;
+}
+
+.pill-repair {
+  background-color: #eff8ff;
+  color: #175cd3;
+  border: 1px solid #b2ddff;
+}
+
+.pill-cleaning {
+  background-color: #f4f3ff;
+  color: #5925dc;
+  border: 1px solid #d9d6fe;
+}
+
+.pill-hold {
+  background-color: #fffbeb;
+  color: #b54708;
+  border: 1px solid #fedf89;
+}
+
+.pill-completed {
+  background-color: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #a6f4c5;
+}
+
+/* Custom Scrollbar for horizontal scrolling table */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: #aaaaaa;
+}

@@ -4,7 +4,7 @@ from pathlib import Path
 # Ensure project root is in sys.path when script is executed directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -24,6 +24,6 @@ class MaintenanceIncident(BaseModel):
     status: IncidentStatus = IncidentStatus.OPEN
     assigned_technician_id: Optional[int] = None
     sla_minutes: int
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     operational_task_id: Optional[UUID] = None
 

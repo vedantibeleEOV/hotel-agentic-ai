@@ -17,10 +17,7 @@ from app.models.enums import RoomStatus, TaskStatus, TaskType
 client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def reset_database():
-    """Reset system state before each test run."""
-    client.post("/api/reset")
+
 
 
 

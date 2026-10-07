@@ -27,3 +27,4 @@ class MaintenanceIssueReport(BaseModel):
     safety_rule_text: Optional[str] = None
     is_fallback: Optional[bool] = False
     needs_human_review: Optional[bool] = False
+    is_human_override: Optional[bool] = False

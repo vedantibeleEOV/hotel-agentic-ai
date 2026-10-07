@@ -281,6 +281,101 @@ export const hotelApi = {
   },
 
   /**
+   * Alias: reportMaintenanceIssue matching convention
+   */
+  async reportMaintenanceIssue(payload) {
+    return this.reportMaintenance(payload);
+  },
+
+  /**
+   * READ: Fetch Maintenance Board (7 summary KPIs, tabs, issues, technicians, warnings)
+   */
+  async getMaintenanceBoard(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (typeof params === 'string') {
+      if (params) searchParams.append('tab', params);
+    } else if (params && typeof params === 'object') {
+      if (params.tab && params.tab !== 'all' && params.tab !== 'All') {
+        searchParams.append('tab', params.tab.toLowerCase());
+      }
+      if (params.floor !== undefined && params.floor !== null && params.floor !== 'All' && params.floor !== 'ALL') {
+        searchParams.append('floor', params.floor);
+      }
+      if (params.search && params.search.trim()) {
+        searchParams.append('search', params.search.trim());
+      }
+    }
+    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const res = await fetch(`${API_BASE}/maintenance/board${queryString}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch maintenance board (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
+   * READ: Fetch enriched Maintenance Issue Detail
+   */
+  async getMaintenanceDetail(incidentOrTaskId) {
+    const res = await fetch(`${API_BASE}/maintenance/${incidentOrTaskId}/detail`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch maintenance detail (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
+   * ACTION: Override AI classification for a maintenance incident
+   */
+  async overrideClassification(incidentId, payload) {
+    const res = await fetch(`${API_BASE}/maintenance/${incidentId}/override-classification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to override classification (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
+   * ACTION: Mark a maintenance incident resolved
+   */
+  async resolveMaintenance(incidentId, payload = {}) {
+    const res = await fetch(`${API_BASE}/maintenance/${incidentId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to resolve maintenance issue (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
+   * READ: Fetch staff members from real database endpoint
+   */
+  async getStaff(role = null) {
+    const searchParams = new URLSearchParams();
+    if (role && role !== 'All' && role !== 'ALL') {
+      searchParams.append('role', role);
+    }
+    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const res = await fetch(`${API_BASE}/staff${queryString}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch staff members');
+    }
+    return await res.json();
+  },
+
+  /**
    * READ: Fetch Housekeeping Board (workload summary, columns, attendants, SLA)
    */
   async getHousekeepingBoard(floor = null) {

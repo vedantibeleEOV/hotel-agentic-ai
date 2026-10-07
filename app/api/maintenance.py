@@ -134,6 +134,9 @@ async def process_maintenance_issue(issue: MaintenanceIssueReport):
             detail="Reporting staff not found",
         )
 
+    if issue.severity is not None:
+        issue.is_human_override = True
+
     try:
         orchestration_result = orchestrator.process_maintenance_report(issue)
         result = maintenance_agent.report_issue(issue)

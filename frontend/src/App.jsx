@@ -5,11 +5,15 @@ import DashboardView from './components/dashboard/DashboardView';
 import RoomsPage from './pages/rooms/RoomsPage';
 import HousekeepingPage from './pages/housekeeping/HousekeepingPage';
 import MaintenanceView from './components/maintenance/MaintenanceView';
+import MaintenancePage from './pages/maintenance/MaintenancePage';
 import AgentTracesView from './components/traces/AgentTracesView';
 import TasksPage from './pages/tasks/TasksPage';
+import StaffPage from './pages/staff/StaffPage';
 import './styles/rooms.css';
 import './styles/tasks.css';
 import './styles/housekeeping.css';
+import './styles/maintenance.css';
+import './styles/staff.css';
 
 function AppContent() {
   const { activeTab } = useHotel();
@@ -19,9 +23,10 @@ function AppContent() {
       {activeTab === 'dashboard' && <DashboardView />}
       {activeTab === 'rooms' && <RoomsPage />}
       {activeTab === 'housekeeping' && <HousekeepingPage />}
-      {activeTab === 'maintenance' && <MaintenanceView />}
+      {activeTab === 'maintenance' && <MaintenancePage />}
       {activeTab === 'traces' && <AgentTracesView />}
       {activeTab === 'tasks' && <TasksPage />}
+      {activeTab === 'staff' && <StaffPage />}
     </AppLayout>
   );
 }

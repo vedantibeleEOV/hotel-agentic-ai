@@ -720,12 +720,13 @@ def test_llm_cannot_inflate_severity_above_rule_table(monkeypatch):
     })
     assert resp.status_code == 202
     data = resp.json()
+    maint = data["maintenance"]
 
     # Rule table specifies SAFETY_LOCK_OR_ALARM -> HIGH (30 mins SLA)
-    assert data["severity"] == "HIGH"
-    assert data["sla_minutes"] == 30
+    assert maint["severity"] == "HIGH"
+    assert maint["sla_minutes"] == 30
 
-    incident_id = data["incident_id"]
+    incident_id = maint["incident_id"]
     detail_resp = client.get(f"/api/maintenance/{incident_id}/detail")
     assert detail_resp.status_code == 200
     detail = detail_resp.json()
@@ -756,11 +757,12 @@ def test_locked_inside_guest_triggers_critical_safety_rule():
     })
     assert resp.status_code == 202
     data = resp.json()
+    maint = data["maintenance"]
 
-    assert data["severity"] == "CRITICAL"
-    assert data["sla_minutes"] == 15
+    assert maint["severity"] == "CRITICAL"
+    assert maint["sla_minutes"] == 15
 
-    incident_id = data["incident_id"]
+    incident_id = maint["incident_id"]
     detail_resp = client.get(f"/api/maintenance/{incident_id}/detail")
     assert detail_resp.status_code == 200
     detail = detail_resp.json()

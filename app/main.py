@@ -14,6 +14,7 @@ from app.api.checkout import housekeeping_agent, repository, router as checkout_
 from app.api.housekeeping import router as housekeeping_router
 from app.api.maintenance import maintenance_agent, router as maintenance_router
 from app.api.rooms import router as rooms_router
+from app.api.staff import router as staff_router
 from app.api.tasks import router as tasks_router
 from app.api.v1.router import api_router
 from app.config import settings
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Failed to initialize repositories or agents")
 
     # Step d: Registering API routers
-    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue, /api/tasks, /api/rooms, /api/housekeeping)", flush=True)
+    print("Registering API routers... OK (mounted: /api/v1, /api/events/checkout, /api/events/maintenance-issue, /api/tasks, /api/rooms, /api/housekeeping, /api/staff)", flush=True)
 
     # Step e: Application ready
     print(f"Application ready to accept requests on http://{settings.HOST}:{settings.PORT}", flush=True)
@@ -66,7 +67,6 @@ async def lifespan(app: FastAPI):
     # Shutdown Phase
     print("Shutting down application...", flush=True)
     engine.dispose()
-
 
 
 app = FastAPI(
@@ -132,6 +132,13 @@ app.include_router(
     housekeeping_router,
     prefix="/api",
     tags=["Housekeeping"]
+)
+
+# Mount Staff router
+app.include_router(
+    staff_router,
+    prefix="/api",
+    tags=["Staff"]
 )
 
 

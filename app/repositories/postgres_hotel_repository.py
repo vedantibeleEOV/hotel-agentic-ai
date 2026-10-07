@@ -282,6 +282,16 @@ class PostgresHotelRepository:
             entity = session.get(StaffEntity, staff_id)
             return self._to_pydantic_staff(entity) if entity else None
 
+    def get_all_staff(self, role: Optional[str] = None) -> List[Staff]:
+        """Read all staff members from PostgreSQL with optional role filter."""
+        with self.session_factory() as session:
+            stmt = select(StaffEntity)
+            if role:
+                stmt = stmt.where(StaffEntity.role == role.upper())
+            stmt = stmt.order_by(StaffEntity.id.asc())
+            entities = session.execute(stmt).scalars().all()
+            return [self._to_pydantic_staff(e) for e in entities]
+
     def get_reservation_by_id(self, reservation_id: int) -> Optional[Reservation]:
 
         """Read a reservation from PostgreSQL by ID and return Pydantic Reservation model."""

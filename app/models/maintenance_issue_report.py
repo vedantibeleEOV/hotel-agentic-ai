@@ -19,4 +19,11 @@ class MaintenanceIssueReport(BaseModel):
     severity: Optional[MaintenanceSeverity] = None
     affects_room_readiness: Optional[bool] = None
 
-
+    # Optional AI decision fields passed from triage or report
+    category_reason: Optional[str] = None
+    severity_reason: Optional[str] = None
+    confidence_score: Optional[str] = None
+    safety_rule_applied: Optional[bool] = False
+    safety_rule_text: Optional[str] = None
+    is_fallback: Optional[bool] = False
+    needs_human_review: Optional[bool] = False

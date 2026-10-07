@@ -4,7 +4,7 @@ from pathlib import Path
 # Ensure project root is in sys.path when script is executed directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel, Field
 
 from app.models.enums import MaintenanceSkill, StaffRole
@@ -18,5 +18,6 @@ class Staff(BaseModel):
     assigned_room_id: Optional[int] = Field(default=None, ge=1)
     is_available: bool = True
     active_task_count: int = Field(default=0, ge=0)
-    skills: list[MaintenanceSkill] = Field(default_factory=list)
-
+    skills: list[Union[MaintenanceSkill, str]] = Field(default_factory=list)
+    availability_status: str = Field(default="AVAILABLE")
+    availability_note: Optional[str] = None

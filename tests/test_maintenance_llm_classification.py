@@ -102,11 +102,16 @@ def test_llm_classification_samples():
         assert "category" in parsed, f"Missing 'category' in {raw_text}"
         assert "severity" in parsed, f"Missing 'severity' in {raw_text}"
         assert "affects_room_readiness" in parsed, f"Missing 'affects_room_readiness' in {raw_text}"
-        assert parsed["category"] in valid_categories, f"Unknown category in {raw_text}"
-        assert parsed["severity"] in valid_severities, f"Unknown severity in {raw_text}"
-        assert isinstance(parsed["affects_room_readiness"], bool), f"Expected bool for affects_room_readiness in {raw_text}"
+        if parsed.get("is_valid_issue") is not False and parsed.get("category") is not None:
+            assert parsed["category"] in valid_categories, f"Unknown category in {raw_text}"
+            assert parsed["severity"] in valid_severities, f"Unknown severity in {raw_text}"
+            assert isinstance(parsed["affects_room_readiness"], bool), f"Expected bool for affects_room_readiness in {raw_text}"
+        else:
+            assert parsed.get("category") is None
+            assert parsed.get("severity") is None
 
 
 if __name__ == "__main__":
     success = run_llm_classification_tests()
     sys.exit(0 if success else 1)
+

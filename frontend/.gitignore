@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+scratch/
+manifest_*.js
+scratch_prototype_*.jsx
+extract_*.py
+find_defs.py
+Voyage_Ops_Prototype.html

@@ -107,8 +107,10 @@ export function useRooms(filters = {}) {
           arrival: extra.arrival,
           priority: extra.priority || (r.priority_score >= 80 ? 'High' : 'Low'),
           note: extra.note,
-          maint: formattedStatus === 'Maintenance' || extra.priority === 'Critical',
-          maintCategory: extra.priority === 'Critical' ? 'Electrical' : 'Plumbing',
+          maint: Boolean(r.open_issue_category),
+          maintCategory: r.open_issue_category
+            ? r.open_issue_category.charAt(0).toUpperCase() + r.open_issue_category.slice(1).toLowerCase()
+            : null,
         };
       });
 

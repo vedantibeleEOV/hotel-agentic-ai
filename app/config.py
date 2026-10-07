@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     CURRENT_USER_NAME: str = "Amit Shah"
     CURRENT_USER_ROLE: str = "Hotel Manager"
 
+    # Maintenance Operations Targets & Settings
+    TARGET_RESOLUTION_MINUTES: int = 45  # assumption: target resolution duration for maintenance operations in minutes
+    DEFAULT_SUPERVISOR_NAME: str = "Rahul Deshpande"
+    HOTEL_SECURITY_EXTENSION: str = "100"
 
     # Docker LLM & Provider Configuration
     OPENAI_API_KEY: str = ""
@@ -56,3 +60,113 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Named Category to Qualifying Skills Mapping
+CATEGORY_SKILLS_MAPPING = {
+    "HVAC": ["HVAC", "GENERAL"],
+    "PLUMBING": ["PLUMBING", "GENERAL"],
+    "ELECTRICAL": ["ELECTRICAL", "GENERAL"],
+    "FURNITURE": ["GENERAL"],
+    "SAFETY": ["ELECTRICAL", "GENERAL"],
+    "GENERAL": ["GENERAL"],
+}
+
+# Named Severity Rules Table
+# Defines category, triggers/keywords, resulting severity, SLA minutes, and human-readable explanation template.
+# All severity rules and safety triggers live in this single table.
+SEVERITY_RULES = [
+    # 1. Critical Safety Hazards (Applies across all categories: ELECTRICAL sparks, gas leaks, fire, smoke, electric shock)
+    {
+        "name": "CRITICAL_SAFETY_HAZARD",
+        "category": None,
+        "triggers": ["gas", "smoke", "fire", "spark", "electric shock", "shock", "explosion"],
+        "severity": "CRITICAL",
+        "sla_minutes": 15,
+        "reason_template": "Safety hazard ('{trigger}') detected. Gas, smoke, spark, and fire issues are always Critical (15-minute SLA).",
+    },
+    # 2. Critical Safety Hazard: Trapped / Locked-in Guest (Emergency)
+    {
+        "name": "SAFETY_GUEST_TRAPPED",
+        "category": "SAFETY",
+        "triggers": ["trapped", "locked inside", "locked in", "stuck inside", "cannot get out", "can't get out"],
+        "severity": "CRITICAL",
+        "sla_minutes": 15,
+        "reason_template": "Guest trapped inside room ('{trigger}') requires emergency response (15-minute SLA).",
+    },
+    # 3. Plumbing Leaks & Floods
+    {
+        "name": "PLUMBING_LEAK_OR_FLOOD",
+        "category": "PLUMBING",
+        "triggers": ["leak", "burst", "flood", "overflow", "clog", "blockage", "choke"],
+        "severity": "HIGH",
+        "sla_minutes": 30,
+        "reason_template": "Water leak ('{trigger}') raises plumbing issues to High (30-minute target SLA).",
+    },
+    # 4. HVAC Outage / Cooling Breakdown
+    {
+        "name": "HVAC_COOLING_BREAKDOWN",
+        "category": "HVAC",
+        "triggers": ["not cooling", "breakdown", "failed", "dead", "compressor", "leak"],
+        "severity": "HIGH",
+        "sla_minutes": 30,
+        "reason_template": "AC cooling failure ('{trigger}') raises HVAC issues to High (30-minute target SLA).",
+    },
+    # 5. Electrical Hazard / Outage
+    {
+        "name": "ELECTRICAL_OUTAGE_OR_EXPOSED",
+        "category": "ELECTRICAL",
+        "triggers": ["outage", "short circuit", "exposed", "burnt", "burning", "power cut", "blackout"],
+        "severity": "HIGH",
+        "sla_minutes": 30,
+        "reason_template": "Electrical defect ('{trigger}') raises electrical issues to High (30-minute target SLA).",
+    },
+    # 6. Security & Safety Mechanism / Lock / Alarm
+    {
+        "name": "SAFETY_LOCK_OR_ALARM",
+        "category": "SAFETY",
+        "triggers": ["lock", "latch", "jammed", "key", "access", "door", "alarm", "detector", "keycard"],
+        "severity": "HIGH",
+        "sla_minutes": 30,
+        "reason_template": "Safety mechanism defect ('{trigger}') raises safety issues to High (30-minute target SLA).",
+    },
+    # 7. Low Severity / Minor Furniture Issues
+    {
+        "name": "FURNITURE_COSMETIC_OR_LOOSE",
+        "category": "FURNITURE",
+        "triggers": ["wobbly", "loose", "scratch", "squeak", "creak", "drawer", "handle", "chair", "desk", "table"],
+        "severity": "LOW",
+        "sla_minutes": 240,
+        "reason_template": "Minor furniture fixture defect ('{trigger}') classified as Low severity (240-minute target SLA).",
+    },
+    # 8. Low Severity / Minor General Handyman Issues
+    {
+        "name": "GENERAL_COSMETIC",
+        "category": "GENERAL",
+        "triggers": ["paint", "scuff", "stain", "touchup", "curtain hook"],
+        "severity": "LOW",
+        "sla_minutes": 240,
+        "reason_template": "Minor cosmetic defect ('{trigger}') classified as Low severity (240-minute target SLA).",
+    },
+]
+
+# Baseline fallback when no specific trigger matches
+BASELINE_SEVERITY_BY_CATEGORY = {
+    "SAFETY": ("HIGH", 30, "Safety and security issues default to High (30-minute target SLA)."),
+    "PLUMBING": ("MEDIUM", 60, "Standard plumbing repairs default to Medium (60-minute target SLA)."),
+    "HVAC": ("MEDIUM", 60, "Standard HVAC repairs default to Medium (60-minute target SLA)."),
+    "ELECTRICAL": ("MEDIUM", 60, "Standard electrical repairs default to Medium (60-minute target SLA)."),
+    "FURNITURE": ("LOW", 240, "Furniture repairs default to Low (240-minute target SLA)."),
+    "GENERAL": ("MEDIUM", 60, "General maintenance repairs default to Medium (60-minute target SLA)."),
+}
+
+
+def get_critical_safety_triggers() -> list[str]:
+    """Return all triggers from SEVERITY_RULES that classify an issue as a CRITICAL safety hazard."""
+    triggers = []
+    for rule in SEVERITY_RULES:
+        if rule.get("severity") == "CRITICAL":
+            triggers.extend(rule.get("triggers", []))
+    return triggers if triggers else ["gas", "smoke", "fire", "spark", "electric shock", "shock", "explosion"]
+
+
+

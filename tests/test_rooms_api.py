@@ -80,3 +80,34 @@ def test_get_rooms_summary_endpoint():
 
     # The sum over all floors equals total
     assert total_from_floors_status == data["total"]
+
+
+def test_rooms_open_issue_category_endpoint():
+    """Verify GET /api/rooms returns open_issue_category from real database incidents and null when none."""
+    # Initially without incidents, open_issue_category is None
+    resp = client.get("/api/rooms")
+    assert resp.status_code == 200
+    rooms = resp.json()
+    room2 = next(r for r in rooms if r["id"] == 2)
+    assert room2.get("open_issue_category") is None
+
+    # Report an electrical incident on room 2
+    client.post("/api/events/maintenance-issue", json={
+        "room_id": 2,
+        "reported_by_staff_id": 201,
+        "description": "Exposed wire sparking behind lamp",
+        "category": "ELECTRICAL",
+        "severity": "CRITICAL",
+    })
+
+    # Query GET /api/rooms again
+    resp_after = client.get("/api/rooms")
+    assert resp_after.status_code == 200
+    rooms_after = resp_after.json()
+    room2_after = next(r for r in rooms_after if r["id"] == 2)
+    assert room2_after["open_issue_category"] == "ELECTRICAL"
+
+    # Other room with no incident must have None
+    room1_after = next(r for r in rooms_after if r["id"] == 1)
+    assert room1_after["open_issue_category"] is None
+

@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -27,3 +27,15 @@ class MaintenanceIncident(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     operational_task_id: Optional[UUID] = None
 
+    # AI decision metadata and resolution tracking
+    category_reason: Optional[str] = None
+    severity_reason: Optional[str] = None
+    confidence_score: Optional[str] = None
+    decision_source: Optional[str] = "RULE_TABLE"
+    safety_rule_applied: Optional[bool] = False
+    safety_rule_text: Optional[str] = None
+    technician_match_reason: Optional[str] = None
+    is_fallback: Optional[bool] = False
+    needs_human_review: Optional[bool] = False
+    resolved_at: Optional[datetime] = None
+    original_ai_decision: Optional[Dict[str, Any]] = None

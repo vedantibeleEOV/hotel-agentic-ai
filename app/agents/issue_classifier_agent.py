@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -26,7 +27,7 @@ class IssueClassifierAgent:
         self,
         ollama_url: str = "http://localhost:11434/api/generate",
         model_name: str = "llama3.2:latest",
-        timeout: float = 60.0,
+        timeout: float = 120.0,
     ):
         self.ollama_url = ollama_url
         self.model_name = model_name
@@ -190,8 +191,6 @@ class IssueClassifierAgent:
             "affects_room_readiness": affects_room_readiness,
         }
 
-    SAFETY_KEYWORDS = ("gas", "smoke", "fire", "spark", "electric shock")
-
     def classify_with_fallback(
         self, description: str
     ) -> Tuple[bool, Optional[MaintenanceCategory], Optional[MaintenanceSeverity], bool]:
@@ -207,7 +206,13 @@ class IssueClassifierAgent:
                 - severity: Classified, overridden, or fallback MaintenanceSeverity (or None if invalid).
                 - needs_human_review: True if fallback default was used or safety override was applied.
         """
+        from app.config import get_critical_safety_triggers
+        from app.agents.maintenance_agent import build_keyword_pattern
+
+        critical_triggers = get_critical_safety_triggers()
+
         # Step a: Try calling self.classify(description)
+        fallback_used = False
         try:
             result = self.classify(description)
             is_valid = result.get("is_valid_issue", False)
@@ -226,6 +231,7 @@ class IssueClassifierAgent:
             severity = result.get("severity")
         except Exception as e:
             # Step b: Log failure and return safe defaults with needs_human_review=True
+            fallback_used = True
             self.activity_logs.append({
                 "agent": "ISSUE_CLASSIFIER_AGENT",
                 "action": "CLASSIFICATION_FALLBACK",
@@ -236,25 +242,45 @@ class IssueClassifierAgent:
                 "needs_human_review": True,
                 "status": "FALLBACK_APPLIED",
             })
-            return True, MaintenanceCategory.GENERAL, MaintenanceSeverity.MEDIUM, True
+            category = MaintenanceCategory.GENERAL
+            severity = MaintenanceSeverity.MEDIUM
 
-        # Step c: If classify() succeeds, check description for safety keywords
-        desc_lower = description.lower() if description else ""
-        matched_keywords = [kw for kw in self.SAFETY_KEYWORDS if kw in desc_lower]
-        if matched_keywords:
-            original_severity = severity
-            severity = MaintenanceSeverity.CRITICAL
+        # Step c: Determine severity strictly using SEVERITY_RULES and BASELINE_SEVERITY_BY_CATEGORY
+        from app.config import SEVERITY_RULES, BASELINE_SEVERITY_BY_CATEGORY
+        from app.agents.maintenance_agent import find_matched_keyword
+
+        cat_str = category.value if hasattr(category, "value") else str(category)
+        matched_rule = None
+        matched_trigger = None
+        for rule in SEVERITY_RULES:
+            rule_cat = rule.get("category")
+            if rule_cat is None or rule_cat == cat_str:
+                m_kw = find_matched_keyword(description or "", rule.get("triggers", []))
+                if m_kw:
+                    matched_rule = rule
+                    matched_trigger = m_kw
+                    break
+
+        if matched_rule:
+            severity = MaintenanceSeverity(matched_rule["severity"])
+        elif cat_str in BASELINE_SEVERITY_BY_CATEGORY:
+            severity = MaintenanceSeverity(BASELINE_SEVERITY_BY_CATEGORY[cat_str][0])
+        else:
+            severity = MaintenanceSeverity.MEDIUM
+
+        is_critical_rule = bool(matched_rule and matched_rule.get("severity") == "CRITICAL")
+        if is_critical_rule:
             self.activity_logs.append({
                 "agent": "ISSUE_CLASSIFIER_AGENT",
                 "action": "SAFETY_OVERRIDE",
                 "description": description,
-                "matched_keywords": matched_keywords,
-                "original_severity": original_severity.value if hasattr(original_severity, "value") else str(original_severity),
+                "matched_keywords": [matched_trigger],
                 "override_severity": MaintenanceSeverity.CRITICAL.value,
                 "status": "OVERRIDDEN",
             })
-            return True, category, severity, True
 
-        # Step d: Normal classification success with no safety keywords
-        return True, category, severity, False
+        # Step d: Return result with needs_human_review flag
+        needs_human_review = fallback_used or is_critical_rule
+        return True, category, severity, needs_human_review
+
 

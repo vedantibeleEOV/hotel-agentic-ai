@@ -104,6 +104,20 @@ def seed_db() -> dict:
         from app.database.connection import engine
         Base.metadata.create_all(bind=engine)
         session.execute(text("ALTER TABLE operational_tasks ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS category_reason VARCHAR(500);"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS severity_reason VARCHAR(500);"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS confidence_score VARCHAR(20);"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS safety_rule_applied BOOLEAN DEFAULT FALSE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS safety_rule_text VARCHAR(500);"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS technician_match_reason VARCHAR(500);"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS is_fallback BOOLEAN DEFAULT FALSE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS needs_human_review BOOLEAN DEFAULT FALSE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP WITH TIME ZONE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS original_ai_decision JSON;"))
+        session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS skills JSON;"))
+        session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS availability_status VARCHAR(30) DEFAULT 'AVAILABLE';"))
+        session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS availability_note VARCHAR(100);"))
+
         # Clear maintenance incidents, task activities, and operational tasks on reset
         session.execute(text("DELETE FROM task_activities;"))
         session.execute(text("DELETE FROM maintenance_incidents;"))
@@ -111,7 +125,7 @@ def seed_db() -> dict:
         # Clear any test-injected non-seed rows to avoid leaks
         session.execute(text("DELETE FROM reservations WHERE id NOT IN (5001, 5002, 5003, 5004, 5005);"))
         session.execute(text("DELETE FROM guests WHERE id NOT IN (101, 102);"))
-        session.execute(text("DELETE FROM staff WHERE id NOT IN (201, 202, 203, 301, 302);"))
+        session.execute(text("DELETE FROM staff WHERE id NOT IN (201, 202, 203, 301, 302, 303);"))
         session.commit()
 
 
@@ -209,6 +223,9 @@ def seed_db() -> dict:
                 "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
+                "skills": [],
+                "availability_status": "AVAILABLE",
+                "availability_note": None,
             },
             {
                 "id": 202,
@@ -218,6 +235,9 @@ def seed_db() -> dict:
                 "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
+                "skills": [],
+                "availability_status": "AVAILABLE",
+                "availability_note": None,
             },
             {
                 "id": 203,
@@ -227,6 +247,9 @@ def seed_db() -> dict:
                 "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
+                "skills": [],
+                "availability_status": "AVAILABLE",
+                "availability_note": None,
             },
             {
                 "id": 301,
@@ -236,6 +259,9 @@ def seed_db() -> dict:
                 "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
+                "skills": ["HVAC", "GENERAL"],
+                "availability_status": "AVAILABLE",
+                "availability_note": None,
             },
             {
                 "id": 302,
@@ -245,6 +271,21 @@ def seed_db() -> dict:
                 "assigned_room_id": None,
                 "is_available": True,
                 "active_task_count": 0,
+                "skills": ["ELECTRICAL", "PLUMBING", "GENERAL"],
+                "availability_status": "AVAILABLE",
+                "availability_note": None,
+            },
+            {
+                "id": 303,
+                "name": "Vikram Rane",
+                "role": "MAINTENANCE",
+                "assigned_floor": 2,
+                "assigned_room_id": None,
+                "is_available": False,
+                "active_task_count": 0,
+                "skills": ["PLUMBING", "GENERAL"],
+                "availability_status": "OFFLINE",
+                "availability_note": "Offline until 14:00",
             },
         ]
         for item in staff_data:
@@ -253,10 +294,15 @@ def seed_db() -> dict:
                 session.add(StaffEntity(**item))
                 inserted_counts["staff"] += 1
             else:
+                existing.name = item["name"]
+                existing.role = item["role"]
                 existing.is_available = item["is_available"]
                 existing.active_task_count = item["active_task_count"]
                 existing.assigned_floor = item["assigned_floor"]
                 existing.assigned_room_id = item["assigned_room_id"]
+                existing.skills = item["skills"]
+                existing.availability_status = item["availability_status"]
+                existing.availability_note = item["availability_note"]
                 skipped_counts["staff"] += 1
 
         session.commit()

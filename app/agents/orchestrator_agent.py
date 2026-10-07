@@ -66,42 +66,23 @@ class OperationsOrchestratorAgent:
         if not room:
             raise ValueError(f"Room with ID {issue.room_id} not found.")
 
-        # If category or severity is missing, auto-classify using IssueClassifierAgent
+        # If category or severity is missing, auto-classify using IssueClassifierAgent with fallback
         classify_res = None
         if issue.category is None or issue.severity is None:
-            try:
-                classify_res = self.classifier_agent.classify(issue.description)
-                is_valid = classify_res.get("is_valid_issue", False)
-                if not is_valid:
-                    self.activity_logs.append({
-                        "agent": "OPERATIONS_ORCHESTRATOR",
-                        "action": "REJECT_INVALID_ISSUE",
-                        "room_id": issue.room_id,
-                        "description": issue.description,
-                        "status": "REJECTED",
-                    })
-                    raise ValueError("Please provide a valid maintenance issue description.")
-
-                issue.category = classify_res.get("category")
-                issue.severity = classify_res.get("severity")
-            except ValueError:
-                raise
-            except Exception:
-                # Fallback to classify_with_fallback
-                is_valid, classified_cat, classified_sev, needs_human_review = (
-                    self.classifier_agent.classify_with_fallback(issue.description)
-                )
-                if not is_valid:
-                    self.activity_logs.append({
-                        "agent": "OPERATIONS_ORCHESTRATOR",
-                        "action": "REJECT_INVALID_ISSUE",
-                        "room_id": issue.room_id,
-                        "description": issue.description,
-                        "status": "REJECTED",
-                    })
-                    raise ValueError("Please provide a valid maintenance issue description.")
-                issue.category = classified_cat
-                issue.severity = classified_sev
+            is_valid, classified_cat, classified_sev, _ = (
+                self.classifier_agent.classify_with_fallback(issue.description)
+            )
+            if not is_valid:
+                self.activity_logs.append({
+                    "agent": "OPERATIONS_ORCHESTRATOR",
+                    "action": "REJECT_INVALID_ISSUE",
+                    "room_id": issue.room_id,
+                    "description": issue.description,
+                    "status": "REJECTED",
+                })
+                raise ValueError("Please provide a valid maintenance issue description.")
+            issue.category = classified_cat
+            issue.severity = classified_sev
 
         # Determine affects_room_readiness:
         # Non-disruptive issues (TV remote, lights, phone, minor electronics) do NOT block cleaning or affect readiness

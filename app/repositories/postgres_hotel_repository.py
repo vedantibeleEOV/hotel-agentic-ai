@@ -61,6 +61,9 @@ class PostgresHotelRepository:
         created_dt = entity.created_at
         if created_dt and created_dt.tzinfo is None:
             created_dt = created_dt.replace(tzinfo=timezone.utc)
+        resolved_dt = entity.resolved_at
+        if resolved_dt and resolved_dt.tzinfo is None:
+            resolved_dt = resolved_dt.replace(tzinfo=timezone.utc)
         return MaintenanceIncident(
             id=entity.id,
             room_id=entity.room_id,
@@ -74,10 +77,21 @@ class PostgresHotelRepository:
             sla_minutes=entity.sla_minutes,
             created_at=created_dt,
             operational_task_id=entity.operational_task_id,
+            category_reason=entity.category_reason,
+            severity_reason=entity.severity_reason,
+            confidence_score=entity.confidence_score,
+            decision_source=entity.decision_source or "RULE_TABLE",
+            safety_rule_applied=entity.safety_rule_applied or False,
+            safety_rule_text=entity.safety_rule_text,
+            technician_match_reason=entity.technician_match_reason,
+            is_fallback=entity.is_fallback or False,
+            needs_human_review=entity.needs_human_review or False,
+            resolved_at=resolved_dt,
+            original_ai_decision=entity.original_ai_decision,
         )
 
     @staticmethod
-    def _to_pydantic_room(entity: RoomEntity) -> Room:
+    def _to_pydantic_room(entity: RoomEntity, open_issue_category: Optional[str] = None) -> Room:
         return Room(
             id=entity.id,
             property_id=entity.property_id,
@@ -85,6 +99,7 @@ class PostgresHotelRepository:
             floor=entity.floor,
             room_type=entity.room_type or "",
             status=RoomStatus(entity.status) if entity.status else RoomStatus.DIRTY,
+            open_issue_category=open_issue_category,
         )
 
     @staticmethod
@@ -109,11 +124,22 @@ class PostgresHotelRepository:
 
     @staticmethod
     def _to_pydantic_staff(entity: StaffEntity) -> Staff:
+        skills_raw = entity.skills
         skills = []
-        if entity.id == 301:
+        if isinstance(skills_raw, list):
+            for sk in skills_raw:
+                try:
+                    skills.append(MaintenanceSkill(str(sk).upper()))
+                except ValueError:
+                    skills.append(sk)
+        elif entity.id == 301:
             skills = [MaintenanceSkill.HVAC, MaintenanceSkill.GENERAL]
         elif entity.id == 302:
             skills = [MaintenanceSkill.ELECTRICAL, MaintenanceSkill.PLUMBING, MaintenanceSkill.GENERAL]
+        elif entity.id == 303:
+            skills = [MaintenanceSkill.PLUMBING, MaintenanceSkill.GENERAL]
+
+        avail_status = entity.availability_status or ("AVAILABLE" if entity.is_available else "BUSY")
         return Staff(
             id=entity.id,
             name=entity.name,
@@ -123,6 +149,8 @@ class PostgresHotelRepository:
             is_available=entity.is_available,
             active_task_count=entity.active_task_count,
             skills=skills,
+            availability_status=avail_status,
+            availability_note=entity.availability_note,
         )
 
 
@@ -165,7 +193,20 @@ class PostgresHotelRepository:
                 stmt = stmt.where(RoomEntity.room_type == room_type.upper())
             stmt = stmt.order_by(RoomEntity.room_number.asc())
             entities = session.execute(stmt).scalars().all()
-            return [self._to_pydantic_room(e) for e in entities]
+
+            # Query open maintenance incidents mapped by room_id
+            inc_stmt = (
+                select(MaintenanceIncidentEntity.room_id, MaintenanceIncidentEntity.category)
+                .where(MaintenanceIncidentEntity.status != "RESOLVED")
+                .order_by(MaintenanceIncidentEntity.created_at.desc())
+            )
+            open_incs = session.execute(inc_stmt).all()
+            open_cat_by_room = {}
+            for r_id, cat in open_incs:
+                if r_id not in open_cat_by_room and cat:
+                    open_cat_by_room[r_id] = cat
+
+            return [self._to_pydantic_room(e, open_issue_category=open_cat_by_room.get(e.id)) for e in entities]
 
     def get_rooms_summary(self) -> dict:
         """Calculate total, status counts, and floor counts using SQL aggregation."""
@@ -219,7 +260,15 @@ class PostgresHotelRepository:
         """Read a room from PostgreSQL by ID and return Pydantic Room model."""
         with self.session_factory() as session:
             entity = session.get(RoomEntity, room_id)
-            return self._to_pydantic_room(entity) if entity else None
+            if not entity:
+                return None
+            inc_stmt = (
+                select(MaintenanceIncidentEntity.category)
+                .where(MaintenanceIncidentEntity.room_id == room_id, MaintenanceIncidentEntity.status != "RESOLVED")
+                .order_by(MaintenanceIncidentEntity.created_at.desc())
+            )
+            open_cat = session.scalar(inc_stmt)
+            return self._to_pydantic_room(entity, open_issue_category=open_cat)
 
     def get_guest_by_id(self, guest_id: int) -> Optional[Guest]:
         """Read a guest from PostgreSQL by ID and return Pydantic Guest model."""
@@ -712,28 +761,42 @@ class PostgresHotelRepository:
             return {e.id: self._to_pydantic_task(e) for e in entities}
 
     def get_available_maintenance_staff(
-        self, required_skill: MaintenanceSkill, room_floor: Optional[int] = None
+        self, required_skills: Union[MaintenanceSkill, str, List[Union[MaintenanceSkill, str]]], room_floor: Optional[int] = None
     ) -> list[Staff]:
-        """Return available maintenance staff having required skill sorted by floor proximity, active task count, and ID."""
+        """Return available maintenance staff having at least one of the required skills sorted by primary skill match, floor proximity, active task count, and ID."""
+        if not isinstance(required_skills, list):
+            skills_list = [required_skills]
+        else:
+            skills_list = required_skills
+
+        skill_enums = [
+            s if isinstance(s, MaintenanceSkill) else MaintenanceSkill(str(s))
+            for s in skills_list
+        ]
+        specialist_skills = [s for s in skill_enums if s != MaintenanceSkill.GENERAL]
+
         with self.session_factory() as session:
             stmt = select(StaffEntity).where(
                 StaffEntity.role == StaffRole.MAINTENANCE.value,
-                StaffEntity.is_available == True,
             )
             staff_entities = list(session.execute(stmt).scalars().all())
             staff_models = [self._to_pydantic_staff(s) for s in staff_entities]
 
+            # Exclude staff who are on leave or offline, but include staff with queued tasks
             filtered = [
                 s for s in staff_models
-                if s.role == StaffRole.MAINTENANCE and s.is_available and required_skill in s.skills
+                if s.role == StaffRole.MAINTENANCE
+                and str(getattr(s, "availability_status", "AVAILABLE")).upper() not in ("ON_LEAVE", "OFFLINE")
+                and any(sk in s.skills for sk in skill_enums)
             ]
-            filtered.sort(
-                key=lambda s: (
-                    0 if (room_floor is not None and s.assigned_floor == room_floor) else 1,
-                    s.active_task_count,
-                    s.id,
-                )
-            )
+
+            def staff_sort_key(s: Staff):
+                has_specialist = any(sk in s.skills for sk in specialist_skills) if specialist_skills else (MaintenanceSkill.GENERAL in s.skills)
+                skill_rank = 0 if has_specialist else 1
+                floor_dist = abs(s.assigned_floor - room_floor) if (room_floor is not None and s.assigned_floor is not None) else 0
+                return (skill_rank, floor_dist, s.active_task_count or 0, s.id)
+
+            filtered.sort(key=staff_sort_key)
             return filtered
 
     @property
@@ -764,6 +827,17 @@ class PostgresHotelRepository:
                 existing.assigned_technician_id = incident.assigned_technician_id
                 existing.sla_minutes = incident.sla_minutes
                 existing.operational_task_id = incident.operational_task_id
+                existing.category_reason = incident.category_reason
+                existing.severity_reason = incident.severity_reason
+                existing.confidence_score = incident.confidence_score
+                existing.decision_source = incident.decision_source or "RULE_TABLE"
+                existing.safety_rule_applied = incident.safety_rule_applied or False
+                existing.safety_rule_text = incident.safety_rule_text
+                existing.technician_match_reason = incident.technician_match_reason
+                existing.is_fallback = incident.is_fallback or False
+                existing.needs_human_review = incident.needs_human_review or False
+                existing.resolved_at = incident.resolved_at
+                existing.original_ai_decision = incident.original_ai_decision
             else:
                 inc_c_at = incident.created_at or datetime.now(timezone.utc)
                 if inc_c_at.tzinfo is None:
@@ -781,6 +855,17 @@ class PostgresHotelRepository:
                     sla_minutes=incident.sla_minutes,
                     created_at=inc_c_at,
                     operational_task_id=incident.operational_task_id,
+                    category_reason=incident.category_reason,
+                    severity_reason=incident.severity_reason,
+                    confidence_score=incident.confidence_score,
+                    decision_source=incident.decision_source or "RULE_TABLE",
+                    safety_rule_applied=incident.safety_rule_applied or False,
+                    safety_rule_text=incident.safety_rule_text,
+                    technician_match_reason=incident.technician_match_reason,
+                    is_fallback=incident.is_fallback or False,
+                    needs_human_review=incident.needs_human_review or False,
+                    resolved_at=incident.resolved_at,
+                    original_ai_decision=incident.original_ai_decision,
                 )
                 session.add(incident_entity)
             session.commit()
@@ -812,7 +897,6 @@ class PostgresHotelRepository:
             incident_entity.assigned_technician_id = technician_id
             incident_entity.status = IncidentStatus.ASSIGNED.value
 
-            staff_entity.is_available = False
             staff_entity.assigned_room_id = incident_entity.room_id
             session.commit()
             return self._to_pydantic_incident(incident_entity)
@@ -2161,6 +2245,949 @@ class PostgresHotelRepository:
                 "activity": activity_list,
                 "allowed_actions": allowed_actions,
             }
+
+    def get_maintenance_board(
+        self,
+        tab: Optional[str] = "open",
+        floor: Optional[Union[int, str]] = None,
+        search: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Retrieve full Maintenance board payload with summary metrics, tab counts, issues, technicians, and warnings."""
+        hotel_tz = ZoneInfo("Asia/Kolkata")
+        now_utc = datetime.now(timezone.utc)
+        now_kolkata = now_utc.astimezone(hotel_tz)
+        today_start_kolkata = now_kolkata.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start_utc = today_start_kolkata.astimezone(timezone.utc)
+
+        target_res_min = getattr(settings, "TARGET_RESOLUTION_MINUTES", 45)
+
+        with self.session_factory() as session:
+            # 1. Fetch all sequence numbers for display_id format (MT-0001)
+            seq_stmt = (
+                select(
+                    MaintenanceIncidentEntity.id,
+                    func.row_number().over(order_by=MaintenanceIncidentEntity.created_at.asc()).label("seq"),
+                )
+            )
+            seq_map = {row[0]: row[1] for row in session.execute(seq_stmt).all()}
+
+            # 2. Fetch all incidents with Room, Task, and Staff using real SQL joins
+            inc_query = (
+                select(
+                    MaintenanceIncidentEntity,
+                    OperationalTaskEntity,
+                    RoomEntity,
+                    StaffEntity,
+                )
+                .outerjoin(OperationalTaskEntity, MaintenanceIncidentEntity.operational_task_id == OperationalTaskEntity.id)
+                .join(RoomEntity, MaintenanceIncidentEntity.room_id == RoomEntity.id)
+                .outerjoin(StaffEntity, MaintenanceIncidentEntity.assigned_technician_id == StaffEntity.id)
+                .order_by(MaintenanceIncidentEntity.created_at.asc())
+            )
+            rows = session.execute(inc_query).all()
+
+            # 3. Fetch all maintenance technicians
+            tech_stmt = (
+                select(StaffEntity)
+                .where(StaffEntity.role == StaffRole.MAINTENANCE.value)
+                .order_by(StaffEntity.id.asc())
+            )
+            tech_entities = list(session.execute(tech_stmt).scalars().all())
+
+            # Parse all issues into structured objects
+            all_issues = []
+            open_count = 0
+            critical_count = 0
+            high_priority_count = 0
+            unassigned_count = 0
+            completed_count = 0
+            sla_breaches_today_count = 0
+            resolved_durations_today = []
+
+            for inc, task, room, tech in rows:
+                seq_num = seq_map.get(inc.id, 1)
+                display_id = f"MT-{seq_num:04d}"
+
+                created_dt = inc.created_at
+                if created_dt and created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=timezone.utc)
+                created_iso = created_dt.isoformat() if created_dt else now_utc.isoformat()
+
+                sla_mins = inc.sla_minutes or 60
+                sla_deadline_dt = (created_dt or now_utc) + timedelta(minutes=sla_mins)
+                sla_deadline_iso = sla_deadline_dt.isoformat()
+
+                # Status determination
+                task_status = str(task.status).upper() if task else str(inc.status).upper()
+                is_completed = (
+                    task_status in (TaskStatus.COMPLETED.value, "RESOLVED", "DONE")
+                    or inc.status in (IncidentStatus.RESOLVED.value, "RESOLVED", "COMPLETED")
+                )
+                is_in_repair = task_status == TaskStatus.IN_PROGRESS.value
+                is_blocked = task_status in (TaskStatus.ON_HOLD.value, "BLOCKED")
+                is_unassigned = inc.assigned_technician_id is None or task is None or inc.status == IncidentStatus.ESCALATED.value
+
+                if is_completed:
+                    status_code = "COMPLETED"
+                    status_label = "Completed"
+                elif is_in_repair:
+                    status_code = "IN_PROGRESS"
+                    status_label = "In repair"
+                elif is_blocked:
+                    status_code = "ON_HOLD"
+                    status_label = "Blocked"
+                elif is_unassigned:
+                    status_code = "UNASSIGNED"
+                    status_label = "Unassigned"
+                else:
+                    status_code = "ASSIGNED"
+                    status_label = "Assigned"
+
+                # SLA breach calculation
+                resolved_dt = inc.resolved_at
+                if resolved_dt and resolved_dt.tzinfo is None:
+                    resolved_dt = resolved_dt.replace(tzinfo=timezone.utc)
+
+                if is_completed:
+                    is_breached = bool(resolved_dt and resolved_dt > sla_deadline_dt)
+                else:
+                    is_breached = bool(now_utc > sla_deadline_dt)
+
+                # Track metrics
+                is_active = not is_completed
+                sev_upper = str(inc.severity).upper()
+
+                if is_active:
+                    open_count += 1
+                    if sev_upper == "CRITICAL":
+                        critical_count += 1
+                    elif sev_upper == "HIGH":
+                        high_priority_count += 1
+                    if is_unassigned:
+                        unassigned_count += 1
+                else:
+                    completed_count += 1
+
+                # SLA breach today
+                is_today = (created_dt and created_dt >= today_start_utc) or (resolved_dt and resolved_dt >= today_start_utc)
+                if is_breached and is_today:
+                    sla_breaches_today_count += 1
+
+                # Average resolution calculation for today
+                if is_completed and resolved_dt and resolved_dt >= today_start_utc and created_dt:
+                    duration_min = (resolved_dt - created_dt).total_seconds() / 60.0
+                    if duration_min >= 0:
+                        resolved_durations_today.append(duration_min)
+
+                # Severity and Category labels
+                sev_label_map = {
+                    "CRITICAL": "Critical",
+                    "HIGH": "High",
+                    "MEDIUM": "Medium",
+                    "LOW": "Low",
+                }
+                sev_label = sev_label_map.get(sev_upper, "Normal")
+
+                cat_raw = str(inc.category).upper()
+                cat_label_map = {
+                    "HVAC": "HVAC",
+                    "PLUMBING": "Plumbing",
+                    "ELECTRICAL": "Electrical",
+                    "FURNITURE": "Furniture",
+                    "SAFETY": "Safety",
+                    "GENERAL": "General",
+                }
+                cat_label = cat_label_map.get(cat_raw, inc.category)
+
+                # Critical banner
+                banner_text = None
+                if sev_upper == "CRITICAL" and is_active:
+                    tech_name = tech.name if tech else "Engineering"
+                    supervisor_name = settings.DEFAULT_SUPERVISOR_NAME
+                    sec_ext = settings.HOTEL_SECURITY_EXTENSION
+                    banner_text = (
+                        f"Critical safety issue — emergency response active. {tech_name} assigned. "
+                        f"Escalation recorded in audit trail for {supervisor_name}. Call Security on ext. {sec_ext} if urgent."
+                    )
+
+                issue_dict = {
+                    "task_id": str(task.id) if task else None,
+                    "incident_id": str(inc.id),
+                    "display_id": display_id,
+                    "room": {
+                        "id": room.id,
+                        "number": room.room_number,
+                        "floor": room.floor,
+                        "type": room.room_type or "",
+                        "status": room.status or "DIRTY",
+                    },
+                    "description": inc.description,
+                    "category": inc.category,
+                    "category_label": cat_label,
+                    "severity": inc.severity,
+                    "severity_label": sev_label,
+                    "sla_minutes": sla_mins,
+                    "sla_deadline": sla_deadline_iso,
+                    "is_breached": is_breached,
+                    "ai_assigned": True,
+                    "flags": {
+                        "default": bool(inc.is_fallback),
+                        "needs_review": bool(inc.needs_human_review),
+                    },
+                    "banner": banner_text,
+                    "assigned_technician": {
+                        "id": tech.id,
+                        "name": tech.name,
+                        "role": tech.role,
+                        "assigned_floor": tech.assigned_floor,
+                    } if tech else None,
+                    "status": status_code,
+                    "status_label": status_label,
+                    "created_at": created_iso,
+                    "_sev_rank": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}.get(sev_upper, 4),
+                    "_deadline_ts": sla_deadline_dt.timestamp(),
+                    "_is_active": is_active,
+                    "_is_critical": (sev_upper == "CRITICAL" and is_active),
+                    "_is_unassigned": (is_unassigned and is_active),
+                }
+                all_issues.append(issue_dict)
+
+            # 4. Filter issues by requested tab, floor, and search
+            filtered_issues = all_issues
+            tab_clean = (tab or "open").strip().lower()
+
+            if tab_clean == "critical":
+                filtered_issues = [i for i in filtered_issues if i["_is_critical"]]
+            elif tab_clean == "unassigned":
+                filtered_issues = [i for i in filtered_issues if i["_is_unassigned"]]
+            elif tab_clean == "completed":
+                filtered_issues = [i for i in filtered_issues if not i["_is_active"]]
+            else:  # default 'open'
+                filtered_issues = [i for i in filtered_issues if i["_is_active"]]
+
+            # Floor filter
+            if floor is not None and str(floor).lower() not in ("all", ""):
+                try:
+                    fl_int = int(floor)
+                    filtered_issues = [i for i in filtered_issues if i["room"]["floor"] == fl_int]
+                except ValueError:
+                    pass
+
+            # Search filter
+            if search and search.strip():
+                s_lower = search.strip().lower()
+                filtered_issues = [
+                    i for i in filtered_issues
+                    if s_lower in i["display_id"].lower()
+                    or s_lower in i["room"]["number"].lower()
+                    or s_lower in (i["description"] or "").lower()
+                    or (i["assigned_technician"] and s_lower in i["assigned_technician"]["name"].lower())
+                ]
+
+            # Sort by severity rank (CRITICAL -> HIGH -> MEDIUM -> LOW) then SLA deadline ascending
+            filtered_issues.sort(key=lambda x: (x["_sev_rank"], x["_deadline_ts"]))
+
+            # Clean internal sorting keys
+            clean_issues = []
+            for item in filtered_issues:
+                out = dict(item)
+                out.pop("_sev_rank", None)
+                out.pop("_deadline_ts", None)
+                out.pop("_is_active", None)
+                out.pop("_is_critical", None)
+                out.pop("_is_unassigned", None)
+                clean_issues.append(out)
+
+            # 5. Build Technicians list & counts
+            technicians_list = []
+            available_tech_count = 0
+            busy_tech_count = 0
+
+            # Map open tasks by staff ID
+            open_tasks_by_staff: Dict[int, List[Dict[str, Any]]] = {}
+            for issue in all_issues:
+                if issue["_is_active"] and issue["assigned_technician"]:
+                    t_id = issue["assigned_technician"]["id"]
+                    open_tasks_by_staff.setdefault(t_id, []).append(issue)
+
+            for tech in tech_entities:
+                tech_skills = tech.skills or []
+                if not tech_skills:
+                    if tech.id == 301:
+                        tech_skills = ["HVAC", "GENERAL"]
+                    elif tech.id == 302:
+                        tech_skills = ["ELECTRICAL", "PLUMBING", "GENERAL"]
+                    elif tech.id == 303:
+                        tech_skills = ["PLUMBING", "GENERAL"]
+
+                assigned_active = open_tasks_by_staff.get(tech.id, [])
+                queued_count = len(assigned_active)
+                in_repair_task = next((t for t in assigned_active if t["status"] == "IN_PROGRESS"), None)
+
+                avail_status_raw = (tech.availability_status or "AVAILABLE").upper()
+
+                if in_repair_task:
+                    avail_status_upper = "BUSY"
+                    queued_non_in_prog = len([t for t in assigned_active if t["status"] != "IN_PROGRESS"])
+                    avail_note = f"Repairing Room {in_repair_task['room']['number']}"
+                    if queued_non_in_prog > 0:
+                        avail_note += f" · {queued_non_in_prog} queued"
+                elif avail_status_raw in ("ON_LEAVE", "OFFLINE"):
+                    avail_status_upper = avail_status_raw
+                    avail_note = tech.availability_note or ("On leave today" if avail_status_raw == "ON_LEAVE" else "Offline until 14:00")
+                else:
+                    avail_status_upper = "AVAILABLE"
+                    if queued_count == 0:
+                        avail_note = "Free for next issue"
+                    elif queued_count == 1:
+                        avail_note = "1 queued"
+                    else:
+                        avail_note = f"{queued_count} queued"
+
+                if avail_status_upper == "AVAILABLE" and tech.is_available:
+                    available_tech_count += 1
+                else:
+                    busy_tech_count += 1
+
+                technicians_list.append({
+                    "id": tech.id,
+                    "name": tech.name,
+                    "skills": tech_skills,
+                    "floor": tech.assigned_floor,
+                    "availability": avail_status_upper,
+                    "availability_note": avail_note,
+                    "queued_count": len([t for t in assigned_active if t["status"] != "IN_PROGRESS"]),
+                })
+
+            # 6. Calculate Dynamic System Warnings
+            warnings_list = []
+            open_active_issues = [i for i in all_issues if i["_is_active"]]
+
+            # Check if any open issue needs PLUMBING skill while all plumbers are offline/on_leave
+            active_skills_on_shift = set()
+            for t in technicians_list:
+                if t["availability"] in ("AVAILABLE", "BUSY"):
+                    for sk in t["skills"]:
+                        active_skills_on_shift.add(str(sk).upper())
+
+            for issue in open_active_issues:
+                cat_upper = str(issue["category"]).upper()
+                if cat_upper in ("PLUMBING",) and "PLUMBING" not in active_skills_on_shift:
+                    w_msg = f"No plumber on shift until 14:00. Plumbing issues are escalated to {settings.DEFAULT_SUPERVISOR_NAME}."
+                    if w_msg not in warnings_list:
+                        warnings_list.append(w_msg)
+                elif cat_upper in ("HVAC",) and "HVAC" not in active_skills_on_shift:
+                    w_msg = "No HVAC technician currently on shift. HVAC issues are queued with supervisor."
+                    if w_msg not in warnings_list:
+                        warnings_list.append(w_msg)
+
+            # 7. Average resolution metrics
+            avg_min = round(sum(resolved_durations_today) / len(resolved_durations_today)) if resolved_durations_today else None
+
+            return {
+                "summary": {
+                    "open_issues": open_count,
+                    "critical": critical_count,
+                    "high_priority": high_priority_count,
+                    "technicians": {
+                        "available": available_tech_count,
+                        "busy": busy_tech_count,
+                        "total": len(tech_entities),
+                    },
+                    "sla_breaches_today": sla_breaches_today_count,
+                    "avg_resolution": {
+                        "minutes": avg_min,
+                        "target_minutes": target_res_min,
+                    },
+                },
+                "tab_counts": {
+                    "open": open_count,
+                    "critical": critical_count,
+                    "unassigned": unassigned_count,
+                    "completed": completed_count,
+                },
+                "issues": clean_issues,
+                "technicians": technicians_list,
+                "warnings": warnings_list,
+            }
+
+    def get_maintenance_detail(self, identifier: Union[UUID, str]) -> Dict[str, Any]:
+        """Retrieve detailed maintenance issue payload by incident ID or task ID."""
+        try:
+            uid = UUID(str(identifier))
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid UUID format for maintenance issue identifier: '{identifier}'.")
+
+        now_utc = datetime.now(timezone.utc)
+
+        with self.session_factory() as session:
+            # 1. Find incident by incident.id or operational_task_id
+            stmt = (
+                select(
+                    MaintenanceIncidentEntity,
+                    OperationalTaskEntity,
+                    RoomEntity,
+                    StaffEntity,
+                )
+                .outerjoin(OperationalTaskEntity, MaintenanceIncidentEntity.operational_task_id == OperationalTaskEntity.id)
+                .join(RoomEntity, MaintenanceIncidentEntity.room_id == RoomEntity.id)
+                .outerjoin(StaffEntity, MaintenanceIncidentEntity.assigned_technician_id == StaffEntity.id)
+                .where(
+                    or_(
+                        MaintenanceIncidentEntity.id == uid,
+                        MaintenanceIncidentEntity.operational_task_id == uid,
+                    )
+                )
+            )
+            row = session.execute(stmt).first()
+            if not row:
+                raise ValueError(f"Maintenance issue with ID {identifier} not found.")
+
+            inc_ent, task_ent, room_ent, tech_ent = row
+
+            # 2. Fetch reporter staff
+            reporter_ent = None
+            if inc_ent.reported_by_staff_id:
+                reporter_ent = session.get(StaffEntity, inc_ent.reported_by_staff_id)
+
+            # 3. Compute deterministic sequence display_id (MT-0001)
+            seq_stmt = select(func.count(MaintenanceIncidentEntity.id)).where(
+                MaintenanceIncidentEntity.created_at <= inc_ent.created_at
+            )
+            seq_num = session.scalar(seq_stmt) or 1
+            display_id = f"MT-{seq_num:04d}"
+
+            # 4. Dates & SLA calculation
+            created_dt = inc_ent.created_at
+            if created_dt and created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            created_iso = created_dt.isoformat() if created_dt else now_utc.isoformat()
+
+            sla_mins = inc_ent.sla_minutes or 60
+            deadline_dt = (created_dt or now_utc) + timedelta(minutes=sla_mins)
+            deadline_iso = deadline_dt.isoformat()
+
+            resolved_dt = inc_ent.resolved_at
+            if resolved_dt and resolved_dt.tzinfo is None:
+                resolved_dt = resolved_dt.replace(tzinfo=timezone.utc)
+
+            task_status = str(task_ent.status).upper() if task_ent else str(inc_ent.status).upper()
+            is_completed = (
+                task_status in (TaskStatus.COMPLETED.value, "RESOLVED", "DONE")
+                or inc_ent.status in (IncidentStatus.RESOLVED.value, "RESOLVED", "COMPLETED")
+            )
+            is_in_repair = task_status == TaskStatus.IN_PROGRESS.value
+            is_blocked = task_status in (TaskStatus.ON_HOLD.value, "BLOCKED")
+            is_unassigned = inc_ent.assigned_technician_id is None or task_ent is None or inc_ent.status == IncidentStatus.ESCALATED.value
+
+            if is_completed:
+                status_code = "COMPLETED"
+                status_label = "Completed"
+            elif is_in_repair:
+                status_code = "IN_PROGRESS"
+                status_label = "In repair"
+            elif is_blocked:
+                status_code = "ON_HOLD"
+                status_label = "Blocked"
+            elif is_unassigned:
+                status_code = "UNASSIGNED"
+                status_label = "Unassigned"
+            else:
+                status_code = "ASSIGNED"
+                status_label = "Assigned"
+
+            if is_completed:
+                is_breached = bool(resolved_dt and resolved_dt > deadline_dt)
+                remaining_sec = 0
+                progress_pct = 100.0
+            else:
+                is_breached = bool(now_utc > deadline_dt)
+                remaining_sec = max(0, int((deadline_dt - now_utc).total_seconds()))
+                elapsed_sec = (now_utc - (created_dt or now_utc)).total_seconds()
+                progress_pct = min(100.0, max(0.0, (elapsed_sec / (sla_mins * 60)) * 100))
+
+            # 5. Check if guest in room
+            is_occupied = (room_ent.status and room_ent.status.upper() == "OCCUPIED")
+            guest_in_room = is_occupied
+
+            # 6. Critical alert banner or No technician banner
+            alert_dict = None
+            sev_upper = str(inc_ent.severity).upper()
+            if sev_upper == "CRITICAL" and (bool(inc_ent.safety_rule_applied) or inc_ent.decision_source == "HUMAN_OVERRIDE") and not is_completed:
+                tech_name = tech_ent.name if tech_ent else "Engineering"
+                supervisor_name = settings.DEFAULT_SUPERVISOR_NAME
+                sec_ext = settings.HOTEL_SECURITY_EXTENSION
+                alert_dict = {
+                    "title": "Critical safety issue — emergency response active",
+                    "text": (
+                        f"{tech_name} assigned. Escalation recorded in audit trail for {supervisor_name}. "
+                        f"If guests are at risk, relocate immediately and contact Security on ext. {sec_ext}."
+                    ),
+                }
+            elif is_unassigned and not is_completed:
+                alert_dict = {
+                    "title": "No technician available",
+                    "text": (
+                        f"No technician currently available with required {inc_ent.category} skill. "
+                        f"Issue escalated to {settings.DEFAULT_SUPERVISOR_NAME} and remains queued."
+                    ),
+                }
+
+            # 7. Audit trail from task_activities
+            activity_list = []
+            target_task_id = task_ent.id if task_ent else None
+            if target_task_id:
+                act_stmt = (
+                    select(TaskActivityEntity)
+                    .where(TaskActivityEntity.task_id == target_task_id)
+                    .order_by(TaskActivityEntity.timestamp.desc(), TaskActivityEntity.id.desc())
+                )
+                act_entities = list(session.execute(act_stmt).scalars().all())
+                activity_list = [
+                    {
+                        "id": str(a.id),
+                        "timestamp": (
+                            a.timestamp.replace(tzinfo=timezone.utc)
+                            if a.timestamp.tzinfo is None
+                            else a.timestamp
+                        ).isoformat(),
+                        "title": a.title,
+                        "actor_name": a.actor_name,
+                        "actor_role": a.actor_role,
+                        "action": a.action,
+                        "outcome": a.outcome,
+                    }
+                    for a in act_entities
+                ]
+
+            # 8. Allowed actions
+            if is_completed:
+                allowed_actions = []
+            elif is_in_repair:
+                allowed_actions = ["complete", "block", "escalate", "reassign", "override_classification"]
+            elif is_blocked:
+                allowed_actions = ["start", "escalate", "reassign", "override_classification"]
+            elif is_unassigned:
+                allowed_actions = ["reassign", "escalate", "override_classification"]
+            else:  # Assigned
+                allowed_actions = ["start", "complete", "block", "escalate", "reassign", "override_classification"]
+
+            # Severity label map
+            sev_label_map = {
+                "CRITICAL": "Critical",
+                "HIGH": "High",
+                "MEDIUM": "Medium",
+                "LOW": "Low",
+            }
+            sev_label = sev_label_map.get(sev_upper, inc_ent.severity)
+
+            cat_raw = str(inc_ent.category).upper()
+            cat_label_map = {
+                "HVAC": "HVAC",
+                "PLUMBING": "Plumbing",
+                "ELECTRICAL": "Electrical",
+                "FURNITURE": "Furniture",
+                "SAFETY": "Safety",
+                "GENERAL": "General",
+            }
+            cat_label = cat_label_map.get(cat_raw, inc_ent.category)
+
+            # Technician payload
+            tech_dict = None
+            if tech_ent:
+                skills_list = tech_ent.skills or []
+                if not skills_list:
+                    if tech_ent.id == 301:
+                        skills_list = ["HVAC", "GENERAL"]
+                    elif tech_ent.id == 302:
+                        skills_list = ["ELECTRICAL", "PLUMBING", "GENERAL"]
+                    elif tech_ent.id == 303:
+                        skills_list = ["PLUMBING", "GENERAL"]
+
+                # Fetch active tasks of technician
+                tech_tasks_stmt = select(OperationalTaskEntity).where(
+                    OperationalTaskEntity.assigned_staff_id == tech_ent.id,
+                    OperationalTaskEntity.status.in_([
+                        TaskStatus.PENDING.value,
+                        TaskStatus.ASSIGNED.value,
+                        TaskStatus.IN_PROGRESS.value,
+                    ]),
+                )
+                tech_tasks = list(session.execute(tech_tasks_stmt).scalars().all())
+                tech_in_prog = next((t for t in tech_tasks if t.status == TaskStatus.IN_PROGRESS.value), None)
+
+                if tech_in_prog:
+                    tech_avail = "BUSY"
+                    r_ent = session.get(RoomEntity, tech_in_prog.room_id)
+                    r_num = r_ent.room_number if r_ent else str(tech_in_prog.room_id)
+                    tech_note = f"Repairing Room {r_num}"
+                else:
+                    tech_avail = "AVAILABLE"
+                    queued_cnt = len(tech_tasks)
+                    if queued_cnt == 0:
+                        tech_note = "Free for next issue"
+                    elif queued_cnt == 1:
+                        tech_note = "1 queued"
+                    else:
+                        tech_note = f"{queued_cnt} queued"
+
+                tech_dict = {
+                    "id": tech_ent.id,
+                    "name": tech_ent.name,
+                    "role": tech_ent.role,
+                    "skills": skills_list,
+                    "availability": tech_avail,
+                    "availability_note": tech_note,
+                    "queued_count": len([t for t in tech_tasks if t.status != TaskStatus.IN_PROGRESS.value]),
+                    "ai_assigned": True,
+                }
+
+            return {
+                "id": str(inc_ent.id),
+                "task_id": str(task_ent.id) if task_ent else None,
+                "display_id": display_id,
+                "header": {
+                    "display_id": display_id,
+                    "room_number": room_ent.room_number,
+                    "room_type": room_ent.room_type or "Room",
+                    "floor": room_ent.floor,
+                    "status": status_code,
+                    "status_label": status_label,
+                    "severity": inc_ent.severity,
+                    "severity_label": sev_label,
+                    "category": inc_ent.category,
+                    "category_label": cat_label,
+                    "reported_by": {
+                        "id": reporter_ent.id if reporter_ent else inc_ent.reported_by_staff_id,
+                        "name": reporter_ent.name if reporter_ent else f"Staff #{inc_ent.reported_by_staff_id}",
+                        "role": reporter_ent.role if reporter_ent else "HOUSEKEEPING",
+                    },
+                    "reported_at": created_iso,
+                    "guest_in_room": guest_in_room,
+                },
+                "alert": alert_dict,
+                "reported_problem": inc_ent.description,
+                "ai_decision": {
+                    "category": inc_ent.category,
+                    "category_reason": inc_ent.category_reason,
+                    "severity": inc_ent.severity,
+                    "severity_reason": inc_ent.severity_reason,
+                    "decision_source": inc_ent.decision_source or "RULE_TABLE",
+                    "confidence": inc_ent.confidence_score,
+                    "safety_rule_applied": bool(inc_ent.safety_rule_applied),
+                    "safety_rule_text": inc_ent.safety_rule_text,
+                    "sla_minutes": sla_mins,
+                    "respond_by": deadline_iso,
+                    "technician": {
+                        "id": tech_ent.id,
+                        "name": tech_ent.name,
+                        "role": tech_ent.role,
+                    } if tech_ent else None,
+                    "technician_reason": inc_ent.technician_match_reason,
+                    "decided_by": "Maintenance Agent",
+                    "decided_at": created_iso,
+                    "is_default": bool(inc_ent.is_fallback),
+                    "needs_review": bool(inc_ent.needs_human_review),
+                },
+                "sla": {
+                    "deadline": deadline_iso,
+                    "minutes_total": sla_mins,
+                    "remaining_seconds": remaining_sec,
+                    "is_breached": is_breached,
+                    "progress_percent": round(progress_pct, 1),
+                },
+                "technician": tech_dict,
+                "audit_trail": activity_list,
+                "allowed_actions": allowed_actions,
+            }
+
+    def override_maintenance_classification(
+        self,
+        identifier: Union[UUID, str],
+        category: Optional[str] = None,
+        severity: Optional[str] = None,
+        reason: Optional[str] = None,
+        staff_id: Optional[int] = None,
+        actor_name: str = settings.CURRENT_USER_NAME,
+        actor_role: str = settings.CURRENT_USER_ROLE,
+    ) -> Dict[str, Any]:
+        """Override AI classification for a maintenance incident with atomic persistence."""
+        try:
+            uid = UUID(str(identifier))
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid UUID format for maintenance issue identifier: '{identifier}'.")
+
+        now_utc = datetime.now(timezone.utc)
+
+        with self.session_factory() as session:
+            # 1. Find incident
+            stmt = (
+                select(MaintenanceIncidentEntity, OperationalTaskEntity)
+                .outerjoin(OperationalTaskEntity, MaintenanceIncidentEntity.operational_task_id == OperationalTaskEntity.id)
+                .where(
+                    or_(
+                        MaintenanceIncidentEntity.id == uid,
+                        MaintenanceIncidentEntity.operational_task_id == uid,
+                    )
+                )
+            )
+            row = session.execute(stmt).first()
+            if not row:
+                raise ValueError(f"Maintenance issue with ID {identifier} not found.")
+
+            inc_ent, task_ent = row
+
+            if inc_ent.status == IncidentStatus.RESOLVED.value:
+                raise ValueError(f"Cannot override classification for resolved incident {identifier}.")
+
+            old_cat = inc_ent.category
+            old_sev = inc_ent.severity
+
+            # Determine actor info
+            actual_actor_name = actor_name
+            actual_actor_role = actor_role
+            if staff_id:
+                staff_ent = session.get(StaffEntity, staff_id)
+                if staff_ent:
+                    actual_actor_name = staff_ent.name
+                    actual_actor_role = staff_ent.role
+
+            # 2. Update category if provided
+            cat_changed = False
+            if category:
+                cat_clean = category.strip().upper()
+                valid_cats = [c.value for c in MaintenanceCategory]
+                if cat_clean not in valid_cats:
+                    raise ValueError(f"Invalid category '{category}'. Must be one of {valid_cats}.")
+                if cat_clean != inc_ent.category:
+                    inc_ent.category = cat_clean
+                    cat_changed = True
+
+            # 3. Update severity & recalculate SLA if provided
+            sev_changed = False
+            if severity:
+                sev_clean = severity.strip().upper()
+                valid_sevs = [s.value for s in MaintenanceSeverity]
+                if sev_clean not in valid_sevs:
+                    raise ValueError(f"Invalid severity '{severity}'. Must be one of {valid_sevs}.")
+
+                if sev_clean != inc_ent.severity:
+                    inc_ent.severity = sev_clean
+                    sev_changed = True
+
+                    # Recalculate SLA based on new severity
+                    sla_map = {
+                        MaintenanceSeverity.CRITICAL.value: 30,
+                        MaintenanceSeverity.HIGH.value: 60,
+                        MaintenanceSeverity.MEDIUM.value: 120,
+                        MaintenanceSeverity.LOW.value: 240,
+                    }
+                    inc_ent.sla_minutes = sla_map.get(sev_clean, 60)
+
+                    # Update priority on operational task if exists
+                    if task_ent:
+                        prio_map = {
+                            MaintenanceSeverity.CRITICAL.value: (100, "URGENT"),
+                            MaintenanceSeverity.HIGH.value: (80, "HIGH"),
+                            MaintenanceSeverity.MEDIUM.value: (50, "STANDARD"),
+                            MaintenanceSeverity.LOW.value: (20, "NORMAL"),
+                        }
+                        p_score, p_level = prio_map.get(sev_clean, (50, "STANDARD"))
+                        task_ent.priority_score = p_score
+                        task_ent.priority_level = p_level
+
+            # Mark human review done and record decision source
+            inc_ent.needs_human_review = False
+            if cat_changed or sev_changed:
+                inc_ent.decision_source = "HUMAN_OVERRIDE"
+                inc_ent.confidence_score = "Rule-based"
+                inc_ent.safety_rule_applied = (inc_ent.severity == "CRITICAL")
+
+            # 4. Formulate audit log action and outcome
+            changes = []
+            if cat_changed:
+                changes.append(f"Category {old_cat} → {inc_ent.category}")
+            if sev_changed:
+                changes.append(f"Severity {old_sev} → {inc_ent.severity}")
+
+            change_summary = ", ".join(changes) if changes else "Classification verified"
+            reason_text = reason.strip() if reason and reason.strip() else "Manual override by supervisor"
+
+            target_task_id = task_ent.id if task_ent else None
+            act_event = TaskActivityEntity(
+                task_id=target_task_id,
+                room_id=inc_ent.room_id,
+                timestamp=now_utc,
+                event_type="HUMAN_OVERRIDE",
+                title="Classification overridden",
+                actor_name=actual_actor_name,
+                actor_role=actual_actor_role,
+                action=f"{change_summary} by {actual_actor_name}",
+                outcome=reason_text,
+            )
+            session.add(act_event)
+
+            session.commit()
+
+        return self.get_maintenance_detail(identifier)
+
+    def resolve_maintenance_incident(
+        self,
+        identifier: Union[UUID, str],
+        staff_id: Optional[int] = None,
+        notes: Optional[str] = None,
+        actor_name: str = settings.CURRENT_USER_NAME,
+        actor_role: str = settings.CURRENT_USER_ROLE,
+    ) -> Dict[str, Any]:
+        """Mark a maintenance incident as resolved, complete task, free technician, and update room."""
+        try:
+            uid = UUID(str(identifier))
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid UUID format for maintenance issue identifier: '{identifier}'.")
+
+        now_utc = datetime.now(timezone.utc)
+
+        with self.session_factory() as session:
+            # 1. Find incident & task
+            stmt = (
+                select(MaintenanceIncidentEntity, OperationalTaskEntity, RoomEntity)
+                .outerjoin(OperationalTaskEntity, MaintenanceIncidentEntity.operational_task_id == OperationalTaskEntity.id)
+                .join(RoomEntity, MaintenanceIncidentEntity.room_id == RoomEntity.id)
+                .where(
+                    or_(
+                        MaintenanceIncidentEntity.id == uid,
+                        MaintenanceIncidentEntity.operational_task_id == uid,
+                    )
+                )
+            )
+            row = session.execute(stmt).first()
+            if not row:
+                raise ValueError(f"Maintenance issue with ID {identifier} not found.")
+
+            inc_ent, task_ent, room_ent = row
+
+            if inc_ent.status == IncidentStatus.RESOLVED.value:
+                raise ValueError(f"Maintenance incident {identifier} is already resolved.")
+
+            # Determine actor info
+            actual_actor_name = actor_name
+            actual_actor_role = actor_role
+            if staff_id:
+                staff_ent = session.get(StaffEntity, staff_id)
+                if staff_ent:
+                    actual_actor_name = staff_ent.name
+                    actual_actor_role = staff_ent.role
+
+            # 2. Mark incident resolved
+            inc_ent.status = IncidentStatus.RESOLVED.value
+            inc_ent.resolved_at = now_utc
+
+            # 3. Complete operational task if linked
+            target_task_id = None
+            if task_ent:
+                target_task_id = task_ent.id
+                task_ent.status = TaskStatus.COMPLETED.value
+                if not task_ent.started_at:
+                    task_ent.started_at = inc_ent.created_at or now_utc
+
+                # Release assigned staff
+                if task_ent.assigned_staff_id:
+                    tech_staff = session.get(StaffEntity, task_ent.assigned_staff_id)
+                    if tech_staff:
+                        remaining_tasks_stmt = select(OperationalTaskEntity).where(
+                            OperationalTaskEntity.assigned_staff_id == tech_staff.id,
+                            OperationalTaskEntity.id != task_ent.id,
+                            OperationalTaskEntity.status.in_([
+                                TaskStatus.PENDING.value,
+                                TaskStatus.ASSIGNED.value,
+                                TaskStatus.IN_PROGRESS.value,
+                            ]),
+                        )
+                        remaining_tasks = list(session.execute(remaining_tasks_stmt).scalars().all())
+                        tech_staff.active_task_count = len(remaining_tasks)
+                        if not remaining_tasks:
+                            tech_staff.is_available = True
+                            tech_staff.assigned_room_id = None
+                        else:
+                            tech_staff.assigned_room_id = remaining_tasks[0].room_id
+
+            # Also check incident assigned_technician_id if task had none
+            elif inc_ent.assigned_technician_id:
+                tech_staff = session.get(StaffEntity, inc_ent.assigned_technician_id)
+                if tech_staff:
+                    tech_staff.is_available = True
+                    tech_staff.assigned_room_id = None
+
+            # 4. Room status orchestration
+            if room_ent and room_ent.status != RoomStatus.OCCUPIED.value:
+                # Check if there are other open maintenance tasks on this room
+                other_maint_stmt = select(OperationalTaskEntity).where(
+                    OperationalTaskEntity.room_id == room_ent.id,
+                    OperationalTaskEntity.task_type == TaskType.ROOM_MAINTENANCE.value,
+                    OperationalTaskEntity.status.in_([
+                        TaskStatus.PENDING.value,
+                        TaskStatus.ASSIGNED.value,
+                        TaskStatus.IN_PROGRESS.value,
+                        TaskStatus.ON_HOLD.value,
+                    ]),
+                )
+                if target_task_id:
+                    other_maint_stmt = other_maint_stmt.where(OperationalTaskEntity.id != target_task_id)
+
+                other_maint = list(session.execute(other_maint_stmt).scalars().all())
+
+                if other_maint:
+                    room_ent.status = RoomStatus.MAINTENANCE.value
+                else:
+                    # Un-hold cleaning tasks if any
+                    on_hold_cleaning_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.room_id == room_ent.id,
+                        OperationalTaskEntity.task_type == TaskType.ROOM_CLEANING.value,
+                        OperationalTaskEntity.status == TaskStatus.ON_HOLD.value,
+                    )
+                    on_hold_cleaning = list(session.execute(on_hold_cleaning_stmt).scalars().all())
+                    for oh in on_hold_cleaning:
+                        oh.status = TaskStatus.ASSIGNED.value
+
+                    if on_hold_cleaning:
+                        room_ent.status = RoomStatus.CLEANING.value
+                    else:
+                        # Check remaining cleaning tasks
+                        rem_cleaning_stmt = select(OperationalTaskEntity).where(
+                            OperationalTaskEntity.room_id == room_ent.id,
+                            OperationalTaskEntity.task_type == TaskType.ROOM_CLEANING.value,
+                            OperationalTaskEntity.status.in_([
+                                TaskStatus.PENDING.value,
+                                TaskStatus.ASSIGNED.value,
+                                TaskStatus.IN_PROGRESS.value,
+                            ]),
+                        )
+                        rem_cleaning = list(session.execute(rem_cleaning_stmt).scalars().all())
+                        if rem_cleaning:
+                            room_ent.status = RoomStatus.CLEANING.value
+                        else:
+                            room_ent.status = RoomStatus.READY.value
+
+            # 5. Log activity event
+            notes_str = notes.strip() if notes and notes.strip() else "Repair verified and completed"
+            act_event = TaskActivityEntity(
+                task_id=target_task_id,
+                room_id=inc_ent.room_id,
+                timestamp=now_utc,
+                event_type="TASK_COMPLETED",
+                title="Repair completed",
+                actor_name=actual_actor_name,
+                actor_role=actual_actor_role,
+                action=f"Resolved by {actual_actor_name}",
+                outcome=notes_str,
+            )
+            session.add(act_event)
+
+            session.commit()
+
+        return self.get_maintenance_detail(identifier)
+
+
 
 
 

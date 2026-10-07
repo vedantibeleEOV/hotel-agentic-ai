@@ -29,10 +29,10 @@ Valid Categories:
 - GENERAL: Physical structural damages, walls, paint peeling, minor fixtures, plaster falling, physical wear and tear requiring handyman repair. Note: Missing amenities, supplies, water bottles, and towels are NOT maintenance issues.
 
 Severity Definitions:
-- CRITICAL: Safety risk, health hazard, or guest cannot use the room at all (e.g., gas leaks, sparks/fires, severe flooding).
-- HIGH: Guest comfort severely affected, item completely non-functional, or room security compromised (e.g., door locks broken, total AC outage in hot weather, blocked toilet).
-- MEDIUM: Item partially working, inconvenient but usable (e.g., slow drain, single flickering light, noisy appliance, TV not turning on).
-- LOW: Minor cosmetic issue, doesn't affect guest experience or room functionality (e.g., wobbly chair, paint scuff, slight noise while still working).
+- CRITICAL: Immediate life safety hazard, gas leaks, sparks, fire, smoke, explosion, or guest trapped inside room (15-minute SLA).
+- HIGH: High priority defect, door locks broken or jammed, water leaks, cooling failure, electrical defect, or blocked fixture (30-minute SLA).
+- MEDIUM: Standard maintenance defect, slow drain, single flickering light, noisy appliance, TV not turning on (60-minute SLA).
+- LOW: Minor cosmetic issue, wobbly chair, paint scuff, minor hardware (240-minute SLA).
 Partially functioning items (such as a slow drain, a dim light, or an AC that cools weakly) ARE valid maintenance issues requiring technical repair, even if the item still works to some extent. Do not reject an issue just because it is still partially working.
 
 Room Readiness Impact (affects_room_readiness):
@@ -102,6 +102,9 @@ Description: 'Gas smell detected'
 {{"is_valid_issue": true, "category": "SAFETY", "severity": "CRITICAL", "affects_room_readiness": true}}
 
 Description: 'Desk chair leg is wobbly and loose'
+{{"is_valid_issue": true, "category": "FURNITURE", "severity": "LOW", "affects_room_readiness": false}}
+
+Description: 'The back of the chair is loose and wobbles'
 {{"is_valid_issue": true, "category": "FURNITURE", "severity": "LOW", "affects_room_readiness": false}}
 
 Description: 'Plaster falling from ceiling creating dust and debris'

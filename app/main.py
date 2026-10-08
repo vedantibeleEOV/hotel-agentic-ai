@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api.auth import router as auth_router
 from app.api.checkout import housekeeping_agent, repository, router as checkout_router
 from app.api.dashboard import router as dashboard_router
 from app.api.housekeeping import router as housekeeping_router
@@ -20,6 +21,7 @@ from app.api.staff import router as staff_router
 from app.api.tasks import router as tasks_router
 from app.api.v1.router import api_router
 from app.config import settings
+from app.core.security import validate_jwt_secret
 from app.database.connection import engine
 
 # Configure standard logging to display INFO and WARNING logs in terminal console
@@ -37,6 +39,7 @@ for uvicorn_logger in ("uvicorn", "uvicorn.error", "uvicorn.access"):
 async def lifespan(app: FastAPI):
     # Step a: Load Environment Configuration
     if settings.PROJECT_NAME and settings.VERSION and settings.sync_database_url:
+        validate_jwt_secret()
         print("Loading environment configuration... OK", flush=True)
     else:
         print("Loading environment configuration... FAILED", flush=True)
@@ -48,6 +51,17 @@ async def lifespan(app: FastAPI):
             conn.execute(text("SELECT 1"))
             conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS blocks_housekeeping BOOLEAN DEFAULT TRUE;"))
             conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS housekeeping_hold_reason VARCHAR(500);"))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
+                    username VARCHAR(50) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    role VARCHAR(50) NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
+                );
+            """))
             conn.commit()
         print(f"Connecting to PostgreSQL database... OK (connected to {settings.POSTGRES_DB})", flush=True)
     except Exception as e:
@@ -104,6 +118,13 @@ app.add_middleware(
 
 # Mount modular API v1 routes
 app.include_router(api_router)
+
+# Mount Authentication router
+app.include_router(
+    auth_router,
+    prefix="/api",
+    tags=["Authentication"]
+)
 
 # Mount Checkout Events router
 app.include_router(

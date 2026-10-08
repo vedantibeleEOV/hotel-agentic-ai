@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHotel } from '../../context/HotelContext';
+import { useAuth } from '../../context/AuthContext';
 import { hotelApi } from '../../api/hotelApi';
 import {
   Building2,
@@ -9,13 +10,29 @@ import {
   ChevronDown,
   RotateCcw,
   AlertTriangle,
+  LogOut,
+  User,
 } from 'lucide-react';
 
 export default function TopBar() {
   const { simulationActive, setSimulationActive, isOnline, totalRooms, resetSystem, refreshData } = useHotel();
+  const { user, logout } = useAuth();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [now, setNow] = useState(new Date());
+  const userMenuRef = useRef(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -120,18 +137,53 @@ export default function TopBar() {
           <span>Reset DB</span>
         </button>
 
-        {/* User Profile Pill */}
-        <div className="flex items-center gap-2.5 pl-2 border-l border-[#ebebeb]">
-          <div className="w-8 h-8 rounded-full bg-[#e2e2e2] text-[#222222] font-bold text-xs flex items-center justify-center flex-shrink-0">
-            A
-          </div>
-          <div className="text-left hidden md:block">
-            <div className="flex items-center gap-1">
-              <span className="font-bold text-xs text-[#222222]">Amit Shah</span>
-              <ChevronDown size={12} className="text-[#6a6a6a]" />
+        {/* User Profile Pill & Dropdown Menu */}
+        <div className="relative pl-2 border-l border-[#ebebeb]" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            type="button"
+            className="flex items-center gap-2.5 hover:bg-[#f7f7f7] p-1.5 rounded-xl transition-all cursor-pointer text-left"
+          >
+            <div className="w-8 h-8 rounded-full bg-[#222222] text-white font-bold text-xs flex items-center justify-center flex-shrink-0 shadow-2xs">
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
             </div>
-            <p className="text-[10px] text-[#6a6a6a] font-medium leading-none">Hotel Manager</p>
-          </div>
+            <div className="text-left hidden md:block">
+              <div className="flex items-center gap-1">
+                <span className="font-bold text-xs text-[#222222]">
+                  {user?.name || 'Amit Shah'}
+                </span>
+                <ChevronDown size={12} className="text-[#6a6a6a]" />
+              </div>
+              <p className="text-[10px] text-[#6a6a6a] font-medium leading-none">
+                {user?.role ? user.role.charAt(0) + user.role.slice(1).toLowerCase() : 'Manager'}
+              </p>
+            </div>
+          </button>
+
+          {/* User Menu Dropdown */}
+          {showUserMenu && (
+            <div className="absolute right-0 top-12 bg-white rounded-2xl shadow-xl border border-[#dddddd] p-2 min-w-[210px] z-50 animate-scale-up">
+              <div className="px-3 py-2 border-b border-[#ebebeb] mb-1">
+                <p className="text-xs font-bold text-[#222222] truncate">{user?.name || 'Staff User'}</p>
+                <p className="text-[11px] text-[#6a6a6a] truncate mt-0.5">@{user?.username || 'user'}</p>
+                <span className="inline-block mt-1.5 px-2 py-0.5 rounded-md bg-[#f2f2f2] text-[10px] font-bold text-[#222222]">
+                  {user?.role || 'STAFF'}
+                </span>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowUserMenu(false);
+                  logout();
+                }}
+                type="button"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
+              >
+                <LogOut size={14} />
+                <span>Log out</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

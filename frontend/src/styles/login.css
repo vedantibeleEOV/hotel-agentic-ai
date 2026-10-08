@@ -1,0 +1,171 @@
+/* ============================================================
+   LOGIN PAGE STYLES — Voyage Ops Authentication
+   ============================================================ */
+
+.login-stage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #f7f7f7;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border: 1px solid var(--color-hairline);
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.05);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #222222;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.login-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #222222;
+  line-height: 1.2;
+}
+
+.login-sub {
+  font-size: 12px;
+  color: #6a6a6a;
+  margin-top: 2px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #222222;
+}
+
+.login-input {
+  height: 44px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 10px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: #222222;
+  background: #ffffff;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.login-input:focus {
+  border-color: #222222;
+  box-shadow: 0 0 0 1px #222222;
+}
+
+.login-btn {
+  height: 46px;
+  border-radius: 10px;
+  background: #ff385c;
+  color: #ffffff;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.15s ease;
+  margin-top: 6px;
+}
+
+.login-btn:hover {
+  background: #e00b41;
+}
+
+.login-btn:disabled {
+  background: #ffd1da;
+  cursor: not-allowed;
+}
+
+.login-alert {
+  background: #fde9e5;
+  color: #8a2410;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-hint {
+  border-top: 1px solid var(--color-hairline-soft);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.login-hint-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6a6a6a;
+}
+
+.login-hint-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.login-hint-chip {
+  background: #f2f2f2;
+  border: 1px solid var(--color-hairline-soft);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #222222;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.login-hint-chip:hover {
+  background: #ebebeb;
+}

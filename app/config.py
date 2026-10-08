@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "hotel_operations_db"
     DATABASE_URL: str = ""
 
+    # JWT Authentication Configuration
+    JWT_SECRET: str = ""
+    JWT_EXPIRE_MINUTES: int = 480
+    DEFAULT_USER_PASSWORD: str = "HotelStaff@2026"
+
+
     @property
     def sync_database_url(self) -> str:
         """Ensure Database URL uses psycopg2 driver format for SQLAlchemy and contains password."""

@@ -1,9 +1,64 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 /**
+ * Enhanced fetch wrapper that attaches JWT Bearer token and intercepts 401s
+ */
+async function authFetch(url, options = {}) {
+  const token = localStorage.getItem('voyage_token');
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (res.status === 401 && !url.includes('/auth/login')) {
+    localStorage.removeItem('voyage_token');
+    localStorage.removeItem('voyage_user');
+    window.dispatchEvent(new CustomEvent('voyage_unauthorized'));
+  }
+
+  return res;
+}
+
+/**
  * Hotel Agentic AI API Client
  */
 export const hotelApi = {
+  /**
+   * AUTH: Login with username and password
+   */
+  async login(credentials) {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Invalid username or password');
+    }
+    return await res.json();
+  },
+
+  /**
+   * AUTH: Get authenticated user profile
+   */
+  async getMe() {
+    const res = await authFetch(`${API_BASE}/auth/me`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch user profile');
+    }
+    return await res.json();
+  },
+
   /**
    * Check backend health status
    */
@@ -36,7 +91,7 @@ export const hotelApi = {
     }
 
     const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/tasks${query}`);
+    const res = await authFetch(`${API_BASE}/tasks${query}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch tasks (HTTP ${res.status})`);
@@ -48,7 +103,7 @@ export const hotelApi = {
    * READ: Fetch tasks aggregate summary statistics
    */
   async getTasksSummary() {
-    const res = await fetch(`${API_BASE}/tasks/summary`);
+    const res = await authFetch(`${API_BASE}/tasks/summary`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to fetch tasks summary');
@@ -68,7 +123,7 @@ export const hotelApi = {
     if (params.offset) searchParams.append('offset', params.offset);
 
     const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/activities${query}`);
+    const res = await authFetch(`${API_BASE}/activities${query}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to fetch activities');
@@ -80,7 +135,7 @@ export const hotelApi = {
    * READ: Fetch specific task details
    */
   async getTaskById(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}`);
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Task not found');
@@ -103,7 +158,7 @@ export const hotelApi = {
       searchParams.append('room_type', params.room_type);
     }
     const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/rooms${queryString}`);
+    const res = await authFetch(`${API_BASE}/rooms${queryString}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to fetch rooms');
@@ -115,7 +170,7 @@ export const hotelApi = {
    * READ: Fetch aggregated rooms summary from database
    */
   async getRoomsSummary() {
-    const res = await fetch(`${API_BASE}/rooms/summary`);
+    const res = await authFetch(`${API_BASE}/rooms/summary`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to fetch rooms summary');
@@ -127,7 +182,7 @@ export const hotelApi = {
    * READ: Fetch room details by ID
    */
   async getRoom(roomId) {
-    const res = await fetch(`${API_BASE}/rooms/${roomId}`);
+    const res = await authFetch(`${API_BASE}/rooms/${roomId}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Room not found');
@@ -139,7 +194,7 @@ export const hotelApi = {
    * READ: Fetch enriched task detail for drawer view
    */
   async getTaskDetail(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/detail`);
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/detail`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch task detail (HTTP ${res.status})`);
@@ -151,7 +206,7 @@ export const hotelApi = {
    * READ: Fetch assignable staff for task reassignment
    */
   async getAssignableStaff(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/assignable-staff`);
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/assignable-staff`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch assignable staff (HTTP ${res.status})`);
@@ -163,7 +218,7 @@ export const hotelApi = {
    * ACTION: Start an operational task (cleaning or repair)
    */
   async startTask(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/start`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -178,7 +233,7 @@ export const hotelApi = {
    * ACTION: Mark an operational task as blocked with an optional reason
    */
   async blockTask(taskId, reason = null) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/block`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/block`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reason ? { reason } : {}),
@@ -194,7 +249,7 @@ export const hotelApi = {
    * ACTION: Escalate an operational task with an optional note
    */
   async escalateTask(taskId, note = null) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/escalate`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/escalate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(note ? { note } : {}),
@@ -210,7 +265,7 @@ export const hotelApi = {
    * ACTION: Cancel an operational task
    */
   async cancelTask(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/cancel`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -225,7 +280,7 @@ export const hotelApi = {
    * ACTION: Reassign task to another staff member
    */
   async reassignTask(taskId, staffId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/reassign`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/reassign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ staff_id: Number(staffId) }),
@@ -241,7 +296,7 @@ export const hotelApi = {
    * ACTION: Change task priority as a human override
    */
   async changeTaskPriority(taskId, priority) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/priority`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/priority`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ priority }),
@@ -257,7 +312,7 @@ export const hotelApi = {
    * UPDATE: Complete an operational task and release staff
    */
   async completeTask(taskId) {
-    const res = await fetch(`${API_BASE}/tasks/${taskId}/complete`, {
+    const res = await authFetch(`${API_BASE}/tasks/${taskId}/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -272,7 +327,7 @@ export const hotelApi = {
    * CREATE: Process checkout event (Triggers Room Readiness & Housekeeping agents)
    */
   async processCheckout(payload) {
-    const res = await fetch(`${API_BASE}/events/checkout`, {
+    const res = await authFetch(`${API_BASE}/events/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -288,7 +343,7 @@ export const hotelApi = {
    * CREATE: Report a maintenance issue (Triggers Maintenance agent)
    */
   async reportMaintenance(payload) {
-    const res = await fetch(`${API_BASE}/events/maintenance-issue`, {
+    const res = await authFetch(`${API_BASE}/events/maintenance-issue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -326,7 +381,7 @@ export const hotelApi = {
       }
     }
     const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/maintenance/board${queryString}`);
+    const res = await authFetch(`${API_BASE}/maintenance/board${queryString}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch maintenance board (HTTP ${res.status})`);
@@ -338,7 +393,7 @@ export const hotelApi = {
    * READ: Fetch enriched Maintenance Issue Detail
    */
   async getMaintenanceDetail(incidentOrTaskId) {
-    const res = await fetch(`${API_BASE}/maintenance/${incidentOrTaskId}/detail`);
+    const res = await authFetch(`${API_BASE}/maintenance/${incidentOrTaskId}/detail`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch maintenance detail (HTTP ${res.status})`);
@@ -350,7 +405,7 @@ export const hotelApi = {
    * ACTION: Override AI classification for a maintenance incident
    */
   async overrideClassification(incidentId, payload) {
-    const res = await fetch(`${API_BASE}/maintenance/${incidentId}/override-classification`, {
+    const res = await authFetch(`${API_BASE}/maintenance/${incidentId}/override-classification`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -366,7 +421,7 @@ export const hotelApi = {
    * ACTION: Mark a maintenance incident resolved
    */
   async resolveMaintenance(incidentId, payload = {}) {
-    const res = await fetch(`${API_BASE}/maintenance/${incidentId}/resolve`, {
+    const res = await authFetch(`${API_BASE}/maintenance/${incidentId}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -387,7 +442,7 @@ export const hotelApi = {
       searchParams.append('role', role);
     }
     const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/staff${queryString}`);
+    const res = await authFetch(`${API_BASE}/staff${queryString}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to fetch staff members');
@@ -404,7 +459,7 @@ export const hotelApi = {
       searchParams.append('floor', floor);
     }
     const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
-    const res = await fetch(`${API_BASE}/housekeeping/board${queryString}`);
+    const res = await authFetch(`${API_BASE}/housekeeping/board${queryString}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch housekeeping board (HTTP ${res.status})`);
@@ -416,7 +471,7 @@ export const hotelApi = {
    * READ: Fetch live Dashboard Command Center summary
    */
   async getDashboardSummary() {
-    const res = await fetch(`${API_BASE}/dashboard/summary`);
+    const res = await authFetch(`${API_BASE}/dashboard/summary`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch dashboard summary (HTTP ${res.status})`);
@@ -428,7 +483,7 @@ export const hotelApi = {
    * READ: Fetch Operational Reports Summary
    */
   async getReportsSummary(range = '7d') {
-    const res = await fetch(`${API_BASE}/reports/summary?range=${encodeURIComponent(range)}`);
+    const res = await authFetch(`${API_BASE}/reports/summary?range=${encodeURIComponent(range)}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Failed to fetch reports summary (HTTP ${res.status})`);
@@ -440,7 +495,7 @@ export const hotelApi = {
    * DELETE / RESET: Reset database state and seed data back to initial state
    */
   async resetSystem() {
-    const res = await fetch(`${API_BASE}/reset`, {
+    const res = await authFetch(`${API_BASE}/reset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -451,5 +506,3 @@ export const hotelApi = {
     return await res.json();
   },
 };
-
-

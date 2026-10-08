@@ -1,0 +1,285 @@
+/* Activity Log Page Styles matching Voyage Ops Prototype */
+
+.act-page {
+  padding: 24px 32px 64px 32px;
+  max-width: 1240px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #222222;
+}
+
+.act-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.act-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
+  color: #222222;
+}
+
+.act-subtitle {
+  font-size: 14px;
+  color: #6a6a6a;
+  margin: 0;
+}
+
+.act-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #222222;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.act-export-btn:hover {
+  background: #f7f7f7;
+  border-color: #bbbbbb;
+}
+
+/* Filter Bar */
+.act-fbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.act-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 38px;
+  min-width: 240px;
+  transition: all 0.15s ease;
+}
+
+.act-search-wrap:focus-within {
+  background: #ffffff;
+  border-color: #222222;
+  box-shadow: 0 0 0 1px #222222;
+}
+
+.act-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #222222;
+  width: 100%;
+}
+
+.act-search-input::placeholder {
+  color: #6a6a6a;
+}
+
+.act-seg {
+  display: inline-flex;
+  align-items: center;
+  background: #f0f0f0;
+  padding: 3px;
+  border-radius: 10px;
+  gap: 2px;
+}
+
+.act-seg-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a6a6a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.act-seg-btn.on {
+  background: #ffffff;
+  color: #222222;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.act-select {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #dddddd;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #222222;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Panel & Table */
+.act-panel {
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.act-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.act-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.act-table th {
+  background: #fafafa;
+  border-bottom: 1px solid #ebebeb;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6a6a6a;
+  letter-spacing: -0.2px;
+  text-transform: none;
+}
+
+.act-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+  color: #222222;
+}
+
+.act-table tr:last-child td {
+  border-bottom: none;
+}
+
+.act-table tr:hover td {
+  background: #fafafa;
+}
+
+.act-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: #222222;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.act-event-title {
+  font-weight: 700;
+  color: #222222;
+  white-space: nowrap;
+}
+
+.act-actor-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.act-actor-name {
+  font-weight: 600;
+  color: #222222;
+}
+
+.act-actor-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6a6a6a;
+}
+
+.act-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.act-dot.ai {
+  background: #17693f;
+}
+
+.act-dot.supervisor {
+  background: #a8430a;
+}
+
+.act-dot.staff {
+  background: #1976d2;
+}
+
+.act-dot.system {
+  background: #757575;
+}
+
+.act-room-link {
+  font-weight: 600;
+  color: #222222;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.act-room-link:hover {
+  color: #ff385c;
+}
+
+.act-action-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #222222;
+  white-space: nowrap;
+}
+
+.act-result-text {
+  color: #6a6a6a;
+  font-size: 13px;
+  max-width: 320px;
+}
+
+.act-load-more {
+  padding: 16px;
+  text-align: center;
+  border-top: 1px solid #ebebeb;
+  background: #fafafa;
+}
+
+.act-more-btn {
+  padding: 6px 18px;
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #222222;
+  cursor: pointer;
+}
+
+.act-more-btn:hover {
+  background: #f0f0f0;
+}

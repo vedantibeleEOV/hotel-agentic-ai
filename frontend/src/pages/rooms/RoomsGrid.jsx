@@ -2,7 +2,7 @@ import React from 'react';
 import RoomCard from './RoomCard';
 import { ROOM_STATUS_CONFIG } from './StatusChips';
 
-export default function RoomsGrid({ rooms, summary, onRoomClick }) {
+export default function RoomsGrid({ rooms, summary, onRoomClick, onCheckout }) {
   // Extract dynamic floors from rooms list and sort in descending order
   const uniqueFloors = Array.from(
     new Set(rooms.map((r) => Number(r.floor)).filter(Boolean))
@@ -63,7 +63,12 @@ export default function RoomsGrid({ rooms, summary, onRoomClick }) {
             {/* Grid layout (up to 5 cards on wide screens) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {floorRooms.map((room) => (
-                <RoomCard key={room.id} room={room} onClick={onRoomClick} />
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  onClick={onRoomClick}
+                  onCheckout={onCheckout}
+                />
               ))}
             </div>
           </div>

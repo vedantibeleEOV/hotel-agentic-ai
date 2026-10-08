@@ -1,0 +1,204 @@
+/* ============================================================
+   REPORTS PAGE STYLES — Operational Performance
+   ============================================================ */
+
+.reports-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.reports-kgrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .reports-kgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .reports-kgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Vertical Bar Charts */
+.reports-bars-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  position: relative;
+  padding-top: 26px;
+  min-height: 180px;
+  width: 100%;
+}
+
+.reports-bc {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  min-width: 24px;
+}
+
+.reports-bar-value {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink);
+  min-height: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.reports-bstack {
+  flex: 1;
+  width: 100%;
+  max-width: 44px;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  gap: 2px;
+  height: 140px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.reports-bstack i {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  transition: height 0.3s ease, min-height 0.3s ease;
+  min-height: 4px;
+}
+
+.reports-bstack:hover {
+  filter: brightness(0.9);
+}
+
+.reports-target-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1.5px dashed #929292;
+  z-index: 2;
+  margin-bottom: 24px;
+  pointer-events: none;
+}
+
+.reports-target-label {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-muted);
+  background: #fff;
+  padding: 0 6px;
+  border-radius: 3px;
+  border: 1px solid var(--color-hairline-soft);
+}
+
+/* Horizontal Progress Bars */
+.reports-hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.reports-hbar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.reports-hbar-track {
+  height: 8px;
+  background: #ebebeb;
+  border-radius: 99px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.reports-hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Cleaning Duration Grid */
+.reports-duration-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.reports-duration-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  padding: 4px 0;
+}
+
+.reports-duration-val {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.2;
+}
+
+/* Export CTA & Controls */
+.reports-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reports-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-hairline);
+  background: #fff;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.reports-export-btn:hover {
+  background: var(--color-surface-soft);
+  border-color: var(--color-ink);
+}
+
+.reports-export-btn:active {
+  background: var(--color-surface-strong);
+}
+
+/* Swatch Legend */
+.reports-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}

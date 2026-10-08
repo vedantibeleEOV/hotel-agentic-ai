@@ -28,3 +28,6 @@ class MaintenanceIssueReport(BaseModel):
     is_fallback: Optional[bool] = False
     needs_human_review: Optional[bool] = False
     is_human_override: Optional[bool] = False
+    blocks_housekeeping: Optional[bool] = None
+    housekeeping_hold_reason: Optional[str] = None
+

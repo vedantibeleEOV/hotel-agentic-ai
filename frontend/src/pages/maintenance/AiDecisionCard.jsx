@@ -103,7 +103,31 @@ export default function AiDecisionCard({ aiDecision, onOverrideClick, canOverrid
             </div>
           </>
         )}
+
+        {/* Housekeeping Impact Row */}
+        {(aiDecision.blocks_housekeeping !== undefined || aiDecision.affects_room_readiness !== undefined) && (
+          <>
+            <div className="maint-ai-label">Housekeeping</div>
+            <div className="maint-ai-val">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  className={`maint-pill ${
+                    (aiDecision.blocks_housekeeping ?? aiDecision.affects_room_readiness) ? 'warn' : 'ok'
+                  }`}
+                >
+                  {(aiDecision.blocks_housekeeping ?? aiDecision.affects_room_readiness)
+                    ? 'On hold'
+                    : 'Not affected'}
+                </span>
+              </div>
+              {aiDecision.housekeeping_hold_reason && (
+                <div className="maint-ai-val-reason">{aiDecision.housekeeping_hold_reason}</div>
+              )}
+            </div>
+          </>
+        )}
       </div>
+
     </div>
   );
 }

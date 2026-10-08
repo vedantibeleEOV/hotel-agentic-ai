@@ -39,3 +39,6 @@ class MaintenanceIncident(BaseModel):
     needs_human_review: Optional[bool] = False
     resolved_at: Optional[datetime] = None
     original_ai_decision: Optional[Dict[str, Any]] = None
+    blocks_housekeeping: Optional[bool] = None
+    housekeeping_hold_reason: Optional[str] = None
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useHotel } from '../../context/HotelContext';
 import { hotelApi } from '../../api/hotelApi';
 import {
@@ -15,6 +15,18 @@ export default function TopBar() {
   const { simulationActive, setSimulationActive, isOnline, totalRooms, resetSystem, refreshData } = useHotel();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeStr = now.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
 
   const handleReset = async () => {
     setIsResetting(true);
@@ -73,8 +85,8 @@ export default function TopBar() {
 
         {/* Live Clock & Date */}
         <div className="text-right hidden sm:block">
-          <div className="text-xs font-bold text-[#222222] font-mono leading-none">14:47:11</div>
-          <div className="text-[11px] text-[#6a6a6a] font-medium mt-0.5">Thu 1 Oct</div>
+          <div className="text-xs font-bold text-[#222222] font-mono leading-none">{timeStr}</div>
+          <div className="text-[11px] text-[#6a6a6a] font-medium mt-0.5">{dateStr}</div>
         </div>
 
         {/* Simulation Flask Button */}
@@ -91,11 +103,11 @@ export default function TopBar() {
         </button>
 
         {/* Notification Bell Button */}
-        <button className="relative p-2 rounded-xl border border-[#dddddd] text-[#6a6a6a] hover:bg-[#f7f7f7] hover:text-[#222222] transition-all">
+        <button
+          title="Notifications"
+          className="relative p-2 rounded-xl border border-[#dddddd] text-[#6a6a6a] hover:bg-[#f7f7f7] hover:text-[#222222] transition-all"
+        >
           <Bell size={18} />
-          <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#ff385c] text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
-            18
-          </span>
         </button>
 
         {/* Reset DB Button (Testing Only) */}

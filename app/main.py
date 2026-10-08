@@ -11,8 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.checkout import housekeeping_agent, repository, router as checkout_router
+from app.api.dashboard import router as dashboard_router
 from app.api.housekeeping import router as housekeeping_router
 from app.api.maintenance import maintenance_agent, router as maintenance_router
+from app.api.reports import router as reports_router
 from app.api.rooms import router as rooms_router
 from app.api.staff import router as staff_router
 from app.api.tasks import router as tasks_router
@@ -44,10 +46,14 @@ async def lifespan(app: FastAPI):
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS blocks_housekeeping BOOLEAN DEFAULT TRUE;"))
+            conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS housekeeping_hold_reason VARCHAR(500);"))
+            conn.commit()
         print(f"Connecting to PostgreSQL database... OK (connected to {settings.POSTGRES_DB})", flush=True)
     except Exception as e:
         print(f"Connecting to PostgreSQL database... FAILED: {e}", flush=True)
         raise e
+
 
     # Step c: Initializing repository and agents
     if repository and housekeeping_agent and maintenance_agent:
@@ -139,6 +145,20 @@ app.include_router(
     staff_router,
     prefix="/api",
     tags=["Staff"]
+)
+
+# Mount Dashboard router
+app.include_router(
+    dashboard_router,
+    prefix="/api",
+    tags=["Dashboard"]
+)
+
+# Mount Reports router
+app.include_router(
+    reports_router,
+    prefix="/api",
+    tags=["Reports"]
 )
 
 

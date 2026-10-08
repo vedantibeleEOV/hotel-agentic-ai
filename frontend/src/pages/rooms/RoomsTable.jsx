@@ -3,7 +3,7 @@ import { Star, Wrench } from 'lucide-react';
 import { StatusPill, PriorityPill } from './RoomCard';
 import { ROOM_STATUS_CONFIG } from './StatusChips';
 
-export default function RoomsTable({ rooms, summary, onRoomClick }) {
+export default function RoomsTable({ rooms, summary, onRoomClick, onCheckout }) {
   // Group rooms by floor in descending order
   const uniqueFloors = Array.from(
     new Set(rooms.map((r) => Number(r.floor)).filter(Boolean))
@@ -74,73 +74,99 @@ export default function RoomsTable({ rooms, summary, onRoomClick }) {
                     <th className="py-2.5 px-3.5">Cleaning</th>
                     <th className="py-2.5 px-3.5">Maintenance</th>
                     <th className="py-2.5 px-3.5">Priority</th>
+                    <th className="py-2.5 px-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#ebebeb]">
-                  {floorRooms.map((room) => (
-                    <tr
-                      key={room.id}
-                      onClick={() => onRoomClick?.(room)}
-                      className="hover:bg-[#fafafa] transition-colors cursor-pointer"
-                    >
-                      {/* Room */}
-                      <td className="py-3 px-3.5 font-bold font-mono text-[#222222]">
-                        <div className="flex items-center gap-1.5">
-                          <span>{room.room_number || room.id}</span>
-                          {room.vip && <Star size={12} className="fill-[#222222] text-[#222222]" />}
-                        </div>
-                      </td>
+                  {floorRooms.map((room) => {
+                    const isOccupied =
+                      room.status === 'Occupied' ||
+                      (room.raw_status || '').toUpperCase() === 'OCCUPIED';
 
-                      {/* Floor */}
-                      <td className="py-3 px-3.5 text-[#6a6a6a] font-mono">{room.floor}</td>
+                    return (
+                      <tr
+                        key={room.id}
+                        onClick={() => onRoomClick?.(room)}
+                        className="hover:bg-[#fafafa] transition-colors cursor-pointer"
+                      >
+                        {/* Room */}
+                        <td className="py-3 px-3.5 font-bold font-mono text-[#222222]">
+                          <div className="flex items-center gap-1.5">
+                            <span>{room.room_number || room.id}</span>
+                            {room.vip && <Star size={12} className="fill-[#222222] text-[#222222]" />}
+                          </div>
+                        </td>
 
-                      {/* Type */}
-                      <td className="py-3 px-3.5 font-normal text-[#222222]">{room.room_type}</td>
+                        {/* Floor */}
+                        <td className="py-3 px-3.5 text-[#6a6a6a] font-mono">{room.floor}</td>
 
-                      {/* Status */}
-                      <td className="py-3 px-3.5">
-                        <StatusPill status={room.status} />
-                      </td>
+                        {/* Type */}
+                        <td className="py-3 px-3.5 font-normal text-[#222222]">{room.room_type}</td>
 
-                      {/* Guest / reservation */}
-                      <td className="py-3 px-3.5 text-[#3f3f3f]">
-                        {room.guest ? room.guest : <span className="text-[#929292]">Vacant</span>}
-                      </td>
+                        {/* Status */}
+                        <td className="py-3 px-3.5">
+                          <StatusPill status={room.status} />
+                        </td>
 
-                      {/* Next check-in */}
-                      <td className="py-3 px-3.5 text-xs font-mono text-[#3f3f3f]">
-                        {room.arrival ? `${room.arrival.ts} · ${room.arrival.name}` : <span className="text-[#929292]">—</span>}
-                      </td>
+                        {/* Guest / reservation */}
+                        <td className="py-3 px-3.5 text-[#3f3f3f]">
+                          {room.guest ? room.guest : <span className="text-[#929292]">Vacant</span>}
+                        </td>
 
-                      {/* Cleaning */}
-                      <td className="py-3 px-3.5 text-xs">
-                        {['Dirty', 'Cleaning', 'Inspection'].includes(room.status) ? (
-                          <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#fcefd6] text-[#874e00] text-[11px] font-semibold">
-                            In turnover
-                          </span>
-                        ) : (
-                          <span className="text-[#929292]">—</span>
-                        )}
-                      </td>
+                        {/* Next check-in */}
+                        <td className="py-3 px-3.5 text-xs font-mono text-[#3f3f3f]">
+                          {room.arrival ? `${room.arrival.ts} · ${room.arrival.name}` : <span className="text-[#929292]">—</span>}
+                        </td>
 
-                      {/* Maintenance */}
-                      <td className="py-3 px-3.5 text-xs">
-                        {room.maint ? (
-                          <span className="inline-flex items-center gap-1 text-[#653886] font-medium">
-                            <PriorityPill priority={room.priority} />
-                            <span className="text-xs ml-1">{room.maintCategory}</span>
-                          </span>
-                        ) : (
-                          <span className="text-[#929292]">—</span>
-                        )}
-                      </td>
+                        {/* Cleaning */}
+                        <td className="py-3 px-3.5 text-xs">
+                          {['Dirty', 'Cleaning', 'Inspection'].includes(room.status) ? (
+                            <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#fcefd6] text-[#874e00] text-[11px] font-semibold">
+                              In turnover
+                            </span>
+                          ) : (
+                            <span className="text-[#929292]">—</span>
+                          )}
+                        </td>
 
-                      {/* Priority */}
-                      <td className="py-3 px-3.5">
-                        <PriorityPill priority={room.priority} />
-                      </td>
-                    </tr>
-                  ))}
+                        {/* Maintenance */}
+                        <td className="py-3 px-3.5 text-xs">
+                          {room.maint ? (
+                            <span className="inline-flex items-center gap-1 text-[#653886] font-medium">
+                              <PriorityPill priority={room.priority} />
+                              <span className="text-xs ml-1">{room.maintCategory}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[#929292]">—</span>
+                          )}
+                        </td>
+
+                        {/* Priority */}
+                        <td className="py-3 px-3.5">
+                          <PriorityPill priority={room.priority} />
+                        </td>
+
+                        {/* Action Column */}
+                        <td className="py-3 px-3.5 text-right">
+                          {isOccupied ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCheckout?.(room);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#fde9e5] text-[#ff385c] hover:bg-[#ff385c] hover:text-white active:scale-95 transition-all text-xs font-semibold cursor-pointer border border-[#f8bbb0] shadow-2xs"
+                              title={`Check out Room ${room.room_number || room.id}`}
+                            >
+                              <span>Check out</span>
+                            </button>
+                          ) : (
+                            <span className="text-[#c1c1c1] text-xs">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

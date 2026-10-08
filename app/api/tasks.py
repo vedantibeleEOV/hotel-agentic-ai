@@ -20,6 +20,35 @@ async def get_tasks_summary_endpoint() -> Dict[str, Any]:
 
 
 @router.get(
+    "/activities",
+    status_code=status.HTTP_200_OK,
+    summary="Get all activity logs",
+    description="Retrieve all operational activity events from PostgreSQL audit trail.",
+)
+@router.get(
+    "/activity/log",
+    status_code=status.HTTP_200_OK,
+    summary="Get activity audit trail",
+    description="Retrieve all operational activity events from PostgreSQL audit trail.",
+)
+async def get_all_activities_endpoint(
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    kind: Optional[str] = None,
+    event_type: Optional[str] = None,
+    search: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Retrieve all activity log entries from database."""
+    return repository.get_all_activities(
+        limit=limit,
+        offset=offset,
+        kind=kind,
+        event_type=event_type,
+        search=search,
+    )
+
+
+@router.get(
     "/tasks/board",
     status_code=status.HTTP_200_OK,
     summary="List tasks for task board view",

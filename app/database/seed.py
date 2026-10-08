@@ -114,7 +114,10 @@ def seed_db() -> dict:
         session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS needs_human_review BOOLEAN DEFAULT FALSE;"))
         session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP WITH TIME ZONE;"))
         session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS original_ai_decision JSON;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS blocks_housekeeping BOOLEAN DEFAULT TRUE;"))
+        session.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS housekeeping_hold_reason VARCHAR(500);"))
         session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS skills JSON;"))
+
         session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS availability_status VARCHAR(30) DEFAULT 'AVAILABLE';"))
         session.execute(text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS availability_note VARCHAR(100);"))
 

@@ -175,20 +175,6 @@ class MaintenanceAgent:
         # 5. Save previous status
         previous_status = room.status.value if hasattr(room.status, "value") else str(room.status)
 
-        # 6. Update room status to MAINTENANCE only if affects_room_readiness is True and room is not OCCUPIED
-        affects_readiness = getattr(issue, "affects_room_readiness", True)
-        if affects_readiness is None:
-            affects_readiness = True
-
-        if previous_status != RoomStatus.OCCUPIED.value and affects_readiness:
-            if previous_status != RoomStatus.MAINTENANCE.value:
-                self.repository.update_room_status(issue.room_id, RoomStatus.MAINTENANCE)
-            new_room_status_enum = RoomStatus.MAINTENANCE
-        else:
-            new_room_status_enum = room.status if isinstance(room.status, RoomStatus) else RoomStatus(previous_status)
-
-        new_status_str = new_room_status_enum.value if hasattr(new_room_status_enum, "value") else str(new_room_status_enum)
-
         # Resolve category if not provided
         if issue.category is None:
             for cat, kws in CAT_KEYWORDS_MAP.items():
@@ -255,6 +241,33 @@ class MaintenanceAgent:
             safety_rule_applied = False
             safety_rule_text = None
 
+        # Evaluate housekeeping blocking rule
+        from app.config import evaluate_blocks_housekeeping
+        if issue.blocks_housekeeping is not None:
+            blocks_housekeeping = bool(issue.blocks_housekeeping)
+            hold_reason = issue.housekeeping_hold_reason or ("Manager override" if is_human_override else "Manual flag")
+        else:
+            blocks_housekeeping, hold_reason = evaluate_blocks_housekeeping(
+                category=cat_str,
+                severity=sev_val,
+                description=issue.description or "",
+                is_safety_rule_applied=safety_rule_applied,
+            )
+
+        issue.blocks_housekeeping = blocks_housekeeping
+        issue.housekeeping_hold_reason = hold_reason
+        issue.affects_room_readiness = blocks_housekeeping
+
+        # 6. Update room status to MAINTENANCE only if blocks_housekeeping is True and room is not OCCUPIED
+        if previous_status != RoomStatus.OCCUPIED.value and blocks_housekeeping:
+            if previous_status != RoomStatus.MAINTENANCE.value:
+                self.repository.update_room_status(issue.room_id, RoomStatus.MAINTENANCE)
+            new_room_status_enum = RoomStatus.MAINTENANCE
+        else:
+            new_room_status_enum = room.status if isinstance(room.status, RoomStatus) else RoomStatus(previous_status)
+
+        new_status_str = new_room_status_enum.value if hasattr(new_room_status_enum, "value") else str(new_room_status_enum)
+
         # 8. Calculate qualifying skills
         qualifying_skills = self._get_qualifying_skills(issue.category)
 
@@ -277,7 +290,9 @@ class MaintenanceAgent:
             description=issue.description,
             category=issue.category,
             severity=issue.severity,
-            affects_room_readiness=issue.affects_room_readiness,
+            affects_room_readiness=blocks_housekeeping,
+            blocks_housekeeping=blocks_housekeeping,
+            housekeeping_hold_reason=hold_reason,
             sla_minutes=sla_minutes,
             category_reason=cat_reason,
             severity_reason=sev_reason,
@@ -289,6 +304,7 @@ class MaintenanceAgent:
             needs_human_review=needs_human_review,
         )
         saved_incident = self.repository.save_maintenance_incident(incident)
+
 
         # 10. Get candidate technicians & select best one using qualifying skills
         candidates = self.repository.get_available_maintenance_staff(qualifying_skills, room.floor)

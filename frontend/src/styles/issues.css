@@ -1,0 +1,218 @@
+/* Issues Page Styles matching Voyage Ops Prototype */
+
+.issues-page {
+  padding: 24px 32px 64px 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  color: #222222;
+}
+
+.issues-head {
+  margin-bottom: 24px;
+}
+
+.issues-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0 0 6px 0;
+  color: #222222;
+}
+
+.issues-subtitle {
+  font-size: 14px;
+  color: #6a6a6a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.issues-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.issues-panel {
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.issues-panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #222222;
+  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.issues-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  gap: 14px;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.issues-card:hover {
+  border-color: #d1d1d1;
+}
+
+.issues-card.crit {
+  background: #fff9f8;
+  border: 1px solid #f8bbb0;
+}
+
+.issues-card.crit:hover {
+  border-color: #f39785;
+}
+
+.issues-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.issues-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.issues-icon.crit {
+  background: #c13515;
+  color: #ffffff;
+}
+
+.issues-icon.warn {
+  background: #fde8da;
+  color: #a8430a;
+}
+
+.issues-icon.normal {
+  background: #f2f2f2;
+  color: #222222;
+}
+
+.issues-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.issues-item-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issues-card.crit .issues-item-title {
+  color: #a82b10;
+}
+
+.issues-item-sub {
+  font-size: 13px;
+  color: #6a6a6a;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.issues-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.issues-pill-breached {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #c13515;
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.issues-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.issues-btn.primary {
+  background: #ff385c;
+  color: #ffffff;
+  border: none;
+}
+
+.issues-btn.primary:hover {
+  background: #e00b41;
+}
+
+.issues-btn.secondary {
+  background: #ffffff;
+  color: #222222;
+  border: 1px solid #dddddd;
+}
+
+.issues-btn.secondary:hover {
+  background: #f7f7f7;
+  border-color: #bbbbbb;
+}
+
+.issues-empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: #6a6a6a;
+}
+
+.issues-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #e8f5e9;
+  color: #2e7d32;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px auto;
+}

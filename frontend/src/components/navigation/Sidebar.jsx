@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab, metrics } = useHotel();
+  const { activeTab, setActiveTab, attentionCount } = useHotel();
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,7 +26,7 @@ export default function Sidebar() {
     { id: 'maintenance', label: 'Maintenance', icon: Wrench },
     { id: 'traces', label: 'AI Operations', icon: Cpu, dot: true },
     { id: 'staff', label: 'Staff', icon: Users },
-    { id: 'issues', label: 'Issues', icon: AlertTriangle, badge: metrics.criticalCount || 9 },
+    { id: 'issues', label: 'Issues', icon: AlertTriangle, badge: attentionCount > 0 ? attentionCount : null },
     { id: 'activity', label: 'Activity Log', icon: FileText },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -50,16 +50,12 @@ export default function Sidebar() {
         <nav className="space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id || (item.id === 'issues' && activeTab === 'maintenance') || (item.id === 'activity' && activeTab === 'traces');
+            const isActive = activeTab === item.id;
             
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  if (item.id === 'issues') setActiveTab('maintenance');
-                  else if (item.id === 'activity') setActiveTab('traces');
-                  else setActiveTab(item.id);
-                }}
+                onClick={() => setActiveTab(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150 ${
                   isActive
                     ? 'bg-[#222222] text-white shadow-xs'

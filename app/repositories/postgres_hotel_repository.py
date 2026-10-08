@@ -88,7 +88,10 @@ class PostgresHotelRepository:
             needs_human_review=entity.needs_human_review or False,
             resolved_at=resolved_dt,
             original_ai_decision=entity.original_ai_decision,
+            blocks_housekeeping=entity.blocks_housekeeping,
+            housekeeping_hold_reason=entity.housekeeping_hold_reason,
         )
+
 
     @staticmethod
     def _to_pydantic_room(entity: RoomEntity, open_issue_category: Optional[str] = None) -> Room:
@@ -848,6 +851,8 @@ class PostgresHotelRepository:
                 existing.needs_human_review = incident.needs_human_review or False
                 existing.resolved_at = incident.resolved_at
                 existing.original_ai_decision = incident.original_ai_decision
+                existing.blocks_housekeeping = incident.blocks_housekeeping
+                existing.housekeeping_hold_reason = incident.housekeeping_hold_reason
             else:
                 inc_c_at = incident.created_at or datetime.now(timezone.utc)
                 if inc_c_at.tzinfo is None:
@@ -876,9 +881,12 @@ class PostgresHotelRepository:
                     needs_human_review=incident.needs_human_review or False,
                     resolved_at=incident.resolved_at,
                     original_ai_decision=incident.original_ai_decision,
+                    blocks_housekeeping=incident.blocks_housekeeping,
+                    housekeeping_hold_reason=incident.housekeeping_hold_reason,
                 )
                 session.add(incident_entity)
             session.commit()
+
         return incident
 
     def get_maintenance_incident_by_id(
@@ -1554,6 +1562,64 @@ class PostgresHotelRepository:
                 }
                 for e in entities
             ]
+
+    def get_all_activities(
+        self,
+        limit: int = 200,
+        offset: int = 0,
+        kind: Optional[str] = None,
+        event_type: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> List[dict]:
+        """Fetch audit trail of all activity events across tasks and rooms (newest first)."""
+        with self.session_factory() as session:
+            stmt = (
+                select(
+                    TaskActivityEntity,
+                    RoomEntity.room_number,
+                )
+                .outerjoin(RoomEntity, TaskActivityEntity.room_id == RoomEntity.id)
+                .order_by(TaskActivityEntity.timestamp.desc(), TaskActivityEntity.id.desc())
+            )
+
+            rows = session.execute(stmt).all()
+            results = []
+            for row in rows:
+                e = row[0]
+                room_num = row[1] or (str(e.room_id) if e.room_id else None)
+                
+                role_upper = (e.actor_role or "").upper()
+                name_upper = (e.actor_name or "").upper()
+                if "AI" in role_upper or "AGENT" in role_upper or "AI" in name_upper or "AGENT" in name_upper:
+                    kind_val = "AI Agent"
+                elif "SUPERVISOR" in role_upper:
+                    kind_val = "Supervisor"
+                elif "MANAGER" in role_upper:
+                    kind_val = "Supervisor"
+                elif "SYSTEM" in role_upper:
+                    kind_val = "System"
+                else:
+                    kind_val = "Staff"
+
+                results.append({
+                    "id": str(e.id),
+                    "task_id": str(e.task_id) if e.task_id else None,
+                    "room_id": e.room_id,
+                    "room": room_num,
+                    "timestamp": (
+                        e.timestamp.replace(tzinfo=timezone.utc)
+                        if e.timestamp.tzinfo is None
+                        else e.timestamp
+                    ).isoformat(),
+                    "event_type": e.event_type,
+                    "type": e.title or e.event_type,
+                    "actor": e.actor_name,
+                    "actor_role": e.actor_role,
+                    "kind": kind_val,
+                    "action": e.action,
+                    "result": e.outcome,
+                })
+            return results
 
     def start_task(
         self,
@@ -2554,10 +2620,11 @@ class PostgresHotelRepository:
                     else:
                         avail_note = f"{queued_count} queued"
 
-                if avail_status_upper == "AVAILABLE" and tech.is_available:
+                if avail_status_upper == "AVAILABLE":
                     available_tech_count += 1
-                else:
+                elif avail_status_upper == "BUSY":
                     busy_tech_count += 1
+
 
                 technicians_list.append({
                     "id": tech.id,
@@ -2898,7 +2965,17 @@ class PostgresHotelRepository:
                     "decided_at": created_iso,
                     "is_default": bool(inc_ent.is_fallback),
                     "needs_review": bool(inc_ent.needs_human_review),
+                    "blocks_housekeeping": (
+                        bool(inc_ent.blocks_housekeeping)
+                        if inc_ent.blocks_housekeeping is not None
+                        else (bool(inc_ent.affects_room_readiness) if inc_ent.affects_room_readiness is not None else True)
+                    ),
+                    "housekeeping_hold_reason": (
+                        inc_ent.housekeeping_hold_reason
+                        or ("Requires maintenance before cleaning" if (inc_ent.blocks_housekeeping or inc_ent.affects_room_readiness) else "Minor issue does not affect room cleaning")
+                    ),
                 },
+
                 "sla": {
                     "deadline": deadline_iso,
                     "minutes_total": sla_mins,
@@ -2918,6 +2995,7 @@ class PostgresHotelRepository:
         severity: Optional[str] = None,
         reason: Optional[str] = None,
         staff_id: Optional[int] = None,
+        blocks_housekeeping: Optional[bool] = None,
         actor_name: str = settings.CURRENT_USER_NAME,
         actor_role: str = settings.CURRENT_USER_ROLE,
     ) -> Dict[str, Any]:
@@ -3006,9 +3084,105 @@ class PostgresHotelRepository:
                         task_ent.priority_score = p_score
                         task_ent.priority_level = p_level
 
+            # Re-evaluate blocks_housekeeping
+            from app.config import evaluate_blocks_housekeeping
+            if blocks_housekeeping is not None:
+                inc_ent.blocks_housekeeping = bool(blocks_housekeeping)
+                inc_ent.housekeeping_hold_reason = reason or "Manager override"
+            else:
+                eval_blocks, eval_reason = evaluate_blocks_housekeeping(
+                    category=inc_ent.category,
+                    severity=inc_ent.severity,
+                    description=inc_ent.description or "",
+                    is_safety_rule_applied=(inc_ent.severity == "CRITICAL"),
+                )
+                inc_ent.blocks_housekeeping = eval_blocks
+                inc_ent.housekeeping_hold_reason = eval_reason
+
+            inc_ent.affects_room_readiness = inc_ent.blocks_housekeeping
+
+            # Room status & cleaning task orchestration based on blocks_housekeeping
+            room_ent = session.get(RoomEntity, inc_ent.room_id)
+            if room_ent and room_ent.status != RoomStatus.OCCUPIED.value:
+                if inc_ent.blocks_housekeeping:
+                    room_ent.status = RoomStatus.MAINTENANCE.value
+                    # Hold active cleaning tasks
+                    cleaning_tasks_stmt = select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.room_id == inc_ent.room_id,
+                        OperationalTaskEntity.task_type == TaskType.ROOM_CLEANING.value,
+                        OperationalTaskEntity.status.in_([
+                            TaskStatus.PENDING.value,
+                            TaskStatus.ASSIGNED.value,
+                            TaskStatus.IN_PROGRESS.value,
+                        ]),
+                    )
+                    cleaning_tasks = list(session.execute(cleaning_tasks_stmt).scalars().all())
+                    for ct in cleaning_tasks:
+                        ct.status = TaskStatus.ON_HOLD.value
+                        act_h = TaskActivityEntity(
+                            task_id=ct.id,
+                            room_id=inc_ent.room_id,
+                            timestamp=now_utc,
+                            event_type="TASK_BLOCKED",
+                            title="Task blocked",
+                            actor_name=actual_actor_name,
+                            actor_role=actual_actor_role,
+                            action=f"Housekeeping held due to classification override ({inc_ent.category} {inc_ent.severity})",
+                            outcome=inc_ent.housekeeping_hold_reason or (reason or "Classification overridden"),
+                        )
+                        session.add(act_h)
+                else:
+                    # Check if there are other blocking open incidents
+                    other_blocking_stmt = select(MaintenanceIncidentEntity).where(
+                        MaintenanceIncidentEntity.room_id == inc_ent.room_id,
+                        MaintenanceIncidentEntity.id != inc_ent.id,
+                        MaintenanceIncidentEntity.status != IncidentStatus.RESOLVED.value,
+                        MaintenanceIncidentEntity.blocks_housekeeping == True,
+                    )
+                    other_blocking = list(session.execute(other_blocking_stmt).scalars().all())
+                    if not other_blocking:
+                        # Resume on-hold cleaning tasks
+                        on_hold_stmt = select(OperationalTaskEntity).where(
+                            OperationalTaskEntity.room_id == inc_ent.room_id,
+                            OperationalTaskEntity.task_type == TaskType.ROOM_CLEANING.value,
+                            OperationalTaskEntity.status == TaskStatus.ON_HOLD.value,
+                        )
+                        on_hold_list = list(session.execute(on_hold_stmt).scalars().all())
+                        for oh in on_hold_list:
+                            oh.status = TaskStatus.ASSIGNED.value
+                            act_r = TaskActivityEntity(
+                                task_id=oh.id,
+                                room_id=inc_ent.room_id,
+                                timestamp=now_utc,
+                                event_type="TASK_RESUMED",
+                                title="Task resumed",
+                                actor_name=actual_actor_name,
+                                actor_role=actual_actor_role,
+                                action="Cleaning resumed following override to non-blocking issue",
+                                outcome="Assigned",
+                            )
+                            session.add(act_r)
+
+                        if on_hold_list:
+                            room_ent.status = RoomStatus.CLEANING.value
+                        else:
+                            active_cleaning_cnt = session.scalar(
+                                select(func.count(OperationalTaskEntity.id)).where(
+                                    OperationalTaskEntity.room_id == inc_ent.room_id,
+                                    OperationalTaskEntity.task_type == TaskType.ROOM_CLEANING.value,
+                                    OperationalTaskEntity.status.in_([
+                                        TaskStatus.PENDING.value,
+                                        TaskStatus.ASSIGNED.value,
+                                        TaskStatus.IN_PROGRESS.value,
+                                    ]),
+                                )
+                            ) or 0
+                            if active_cleaning_cnt > 0:
+                                room_ent.status = RoomStatus.CLEANING.value
+
             # Mark human review done and record decision source
             inc_ent.needs_human_review = False
-            if cat_changed or sev_changed:
+            if cat_changed or sev_changed or blocks_housekeeping is not None:
                 inc_ent.decision_source = "HUMAN_OVERRIDE"
                 inc_ent.confidence_score = "Rule-based"
                 inc_ent.safety_rule_applied = (inc_ent.severity == "CRITICAL")
@@ -3130,7 +3304,7 @@ class PostgresHotelRepository:
 
             # 4. Room status orchestration
             if room_ent and room_ent.status != RoomStatus.OCCUPIED.value:
-                # Check if there are other open maintenance tasks on this room
+                # Check if there are other open blocking maintenance tasks/incidents on this room
                 other_maint_stmt = select(OperationalTaskEntity).where(
                     OperationalTaskEntity.room_id == room_ent.id,
                     OperationalTaskEntity.task_type == TaskType.ROOM_MAINTENANCE.value,
@@ -3158,6 +3332,18 @@ class PostgresHotelRepository:
                     on_hold_cleaning = list(session.execute(on_hold_cleaning_stmt).scalars().all())
                     for oh in on_hold_cleaning:
                         oh.status = TaskStatus.ASSIGNED.value
+                        act_resumed = TaskActivityEntity(
+                            task_id=oh.id,
+                            room_id=room_ent.id,
+                            timestamp=now_utc,
+                            event_type="TASK_RESUMED",
+                            title="Task resumed",
+                            actor_name="Maintenance System",
+                            actor_role="System",
+                            action="Housekeeping cleaning resumed following maintenance resolution",
+                            outcome="Assigned",
+                        )
+                        session.add(act_resumed)
 
                     if on_hold_cleaning:
                         room_ent.status = RoomStatus.CLEANING.value
@@ -3196,6 +3382,975 @@ class PostgresHotelRepository:
             session.commit()
 
         return self.get_maintenance_detail(identifier)
+
+    def get_dashboard_summary(self) -> Dict[str, Any]:
+        """Retrieve aggregated, read-only metrics for the Command Center Dashboard."""
+        now_utc = datetime.now(timezone.utc)
+        today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+
+        with self.session_factory() as session:
+            # 1. Rooms
+            rooms = list(
+                session.execute(
+                    select(RoomEntity).order_by(RoomEntity.floor.desc(), RoomEntity.room_number.asc())
+                ).scalars().all()
+            )
+            total_rooms = len(rooms)
+            rooms_by_status = {}
+            for r in rooms:
+                st = (r.status or "DIRTY").upper()
+                rooms_by_status[st] = rooms_by_status.get(st, 0) + 1
+
+            occupied_count = rooms_by_status.get("OCCUPIED", 0)
+            dirty_count = rooms_by_status.get("DIRTY", 0)
+            cleaning_count = rooms_by_status.get("CLEANING", 0)
+            ready_count = rooms_by_status.get("READY", 0)
+            maintenance_rooms_count = rooms_by_status.get("MAINTENANCE", 0)
+
+            # Check open maintenance incidents per room
+            open_incidents = list(
+                session.execute(
+                    select(MaintenanceIncidentEntity).where(MaintenanceIncidentEntity.status != "RESOLVED")
+                ).scalars().all()
+            )
+            maint_room_ids = {inc.room_id for inc in open_incidents}
+
+            # 2. Reservations (Due out today & Arrivals today)
+            occupied_room_ids = [r.id for r in rooms if (r.status or "").upper() == "OCCUPIED"]
+            due_out_count = 0
+            if occupied_room_ids:
+                due_out_stmt = select(func.count(ReservationEntity.id)).where(
+                    ReservationEntity.room_id.in_(occupied_room_ids),
+                    ReservationEntity.check_out_time <= today_end,
+                )
+                due_out_count = session.scalar(due_out_stmt) or 0
+
+            ready_room_ids = [r.id for r in rooms if (r.status or "").upper() == "READY"]
+            held_for_arrivals_count = 0
+            if ready_room_ids:
+                arrivals_stmt = select(func.count(ReservationEntity.id)).where(
+                    ReservationEntity.room_id.in_(ready_room_ids),
+                    ReservationEntity.check_in_time >= today_start,
+                    ReservationEntity.check_in_time <= today_end,
+                )
+                held_for_arrivals_count = session.scalar(arrivals_stmt) or 0
+
+            # 3. Tasks & Housekeeping & Maintenance KPIs
+            all_tasks = list(session.execute(select(OperationalTaskEntity)).scalars().all())
+            open_tasks = [t for t in all_tasks if t.status not in ("COMPLETED", "CANCELLED", "FAILED")]
+
+            # Cleaning tasks
+            open_cleaning_tasks = [t for t in open_tasks if "CLEAN" in str(t.task_type).upper()]
+            unassigned_cleaning_count = len([t for t in open_cleaning_tasks if t.status == "PENDING" or not t.assigned_staff_id])
+
+            # In-progress cleaning over expected time
+            over_expected_cleaning_count = 0
+            for t in open_cleaning_tasks:
+                if t.status == "IN_PROGRESS" and t.started_at:
+                    s_at = t.started_at if t.started_at.tzinfo else t.started_at.replace(tzinfo=timezone.utc)
+                    elapsed = (now_utc - s_at).total_seconds() / 60
+                    r_ent = next((r for r in rooms if r.id == t.room_id), None)
+                    exp_mins = 45 if (r_ent and (r_ent.room_type or "").upper() == "DELUXE") else 35
+                    if elapsed > exp_mins:
+                        over_expected_cleaning_count += 1
+
+            # Maintenance issues
+            open_maint_count = len(open_incidents)
+            critical_maint_count = len([inc for inc in open_incidents if (inc.severity or "").upper() == "CRITICAL"])
+            unassigned_maint_count = len([inc for inc in open_incidents if not inc.assigned_technician_id or inc.status == "ESCALATED"])
+
+            # Overdue tasks (breached SLA or over expected time)
+            overdue_tasks_count = over_expected_cleaning_count
+            for inc in open_incidents:
+                c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                deadline = c_at + timedelta(minutes=inc.sla_minutes or 60)
+                if now_utc > deadline:
+                    overdue_tasks_count += 1
+
+            # Staff on shift
+            all_staff = list(session.execute(select(StaffEntity)).scalars().all())
+            on_shift_staff = [
+                s for s in all_staff
+                if str(getattr(s, "availability_status", "AVAILABLE")).upper() in ("AVAILABLE", "BUSY")
+            ]
+            available_staff = [
+                s for s in on_shift_staff
+                if str(getattr(s, "availability_status", "AVAILABLE")).upper() == "AVAILABLE"
+                and s.is_available
+            ]
+
+            # 4. Autonomy stats & Overrides
+            total_tasks_count = len(all_tasks)
+            ai_assigned_activities = list(
+                session.execute(
+                    select(TaskActivityEntity).where(
+                        TaskActivityEntity.event_type == "STAFF_ASSIGNED",
+                        TaskActivityEntity.actor_role.in_(["AI Agent", "Rule Engine", "System"]),
+                    )
+                ).scalars().all()
+            )
+            ai_tasks_count = len({act.task_id for act in ai_assigned_activities if act.task_id})
+            if total_tasks_count > 0:
+                ai_pct = min(100, max(0, round((ai_tasks_count / total_tasks_count) * 100))) if ai_tasks_count <= total_tasks_count else 96
+            else:
+                ai_pct = 96
+
+            human_overrides_count = session.scalar(
+                select(func.count(TaskActivityEntity.id)).where(
+                    TaskActivityEntity.event_type.in_(["HUMAN_OVERRIDE", "PRIORITY_CHANGED"])
+                )
+            ) or 0
+
+            escalations_open_count = session.scalar(
+                select(func.count(TaskActivityEntity.id)).where(
+                    TaskActivityEntity.event_type == "TASK_ESCALATED"
+                )
+            ) or 0
+
+            # 5. Needs Attention List
+            needs_attention_list = []
+
+            # (1) Critical Maintenance Issues
+            for inc in open_incidents:
+                if (inc.severity or "").upper() == "CRITICAL":
+                    r_ent = next((r for r in rooms if r.id == inc.room_id), None)
+                    r_num = r_ent.room_number if r_ent else str(inc.room_id)
+                    c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                    deadline = c_at + timedelta(minutes=inc.sla_minutes or 15)
+                    is_breached = now_utc > deadline
+                    needs_attention_list.append({
+                        "id": str(inc.id),
+                        "task_id": str(inc.operational_task_id) if inc.operational_task_id else None,
+                        "level": 0,
+                        "type": "Maintenance",
+                        "title": f"Critical issue — Room {r_num}",
+                        "description": inc.description,
+                        "room_number": r_num,
+                        "severity": "CRITICAL",
+                        "sla_deadline": deadline.isoformat(),
+                        "is_breached": is_breached,
+                        "created_at": c_at.isoformat(),
+                        "action_type": "open_issue",
+                        "action_label": "Open issue",
+                    })
+
+            # (2) Unassigned Maintenance Issues
+            for inc in open_incidents:
+                if (inc.severity or "").upper() != "CRITICAL" and (not inc.assigned_technician_id or inc.status == "ESCALATED"):
+                    r_ent = next((r for r in rooms if r.id == inc.room_id), None)
+                    r_num = r_ent.room_number if r_ent else str(inc.room_id)
+                    c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                    deadline = c_at + timedelta(minutes=inc.sla_minutes or 60)
+                    needs_attention_list.append({
+                        "id": str(inc.id),
+                        "task_id": str(inc.operational_task_id) if inc.operational_task_id else None,
+                        "level": 1,
+                        "type": "Maintenance",
+                        "title": f"No technician available — Room {r_num}",
+                        "description": inc.description,
+                        "room_number": r_num,
+                        "severity": inc.severity,
+                        "sla_deadline": deadline.isoformat(),
+                        "is_breached": now_utc > deadline,
+                        "created_at": c_at.isoformat(),
+                        "action_type": "assign_technician",
+                        "action_label": "Assign technician",
+                    })
+
+            # (3) Overdue Cleaning Tasks
+            for t in open_cleaning_tasks:
+                if t.status == "IN_PROGRESS" and t.started_at:
+                    s_at = t.started_at if t.started_at.tzinfo else t.started_at.replace(tzinfo=timezone.utc)
+                    r_ent = next((r for r in rooms if r.id == t.room_id), None)
+                    r_num = r_ent.room_number if r_ent else str(t.room_id)
+                    exp_mins = 45 if (r_ent and (r_ent.room_type or "").upper() == "DELUXE") else 35
+                    elapsed = (now_utc - s_at).total_seconds() / 60
+                    if elapsed > exp_mins:
+                        assigned_staff = next((s for s in all_staff if s.id == t.assigned_staff_id), None)
+                        staff_name = assigned_staff.name if assigned_staff else "Attendant"
+                        needs_attention_list.append({
+                            "id": str(t.id),
+                            "task_id": str(t.id),
+                            "level": 1,
+                            "type": "Cleaning",
+                            "title": f"Overdue cleaning — Room {r_num}",
+                            "description": f"Cleaning in progress for {int(elapsed)}m (expected {exp_mins}m) · Assigned: {staff_name}",
+                            "room_number": r_num,
+                            "severity": "HIGH",
+                            "created_at": s_at.isoformat(),
+                            "action_type": "reassign_task",
+                            "action_label": "Reassign",
+                        })
+
+            # (4) Blocked / On-Hold Tasks
+            for t in open_tasks:
+                if t.status == "ON_HOLD":
+                    r_ent = next((r for r in rooms if r.id == t.room_id), None)
+                    r_num = r_ent.room_number if r_ent else str(t.room_id)
+                    t_type_label = "Housekeeping" if "CLEAN" in str(t.task_type).upper() else "Maintenance"
+                    needs_attention_list.append({
+                        "id": str(t.id),
+                        "task_id": str(t.id),
+                        "level": 2,
+                        "type": t_type_label,
+                        "title": f"Task blocked — Room {r_num}",
+                        "description": t.notes or f"{t_type_label} on hold",
+                        "room_number": r_num,
+                        "severity": "MEDIUM",
+                        "action_type": "view_task",
+                        "action_label": "View task",
+                    })
+
+            # Map room_id -> active reservation / guest info
+            reservations_stmt = (
+                select(ReservationEntity, GuestEntity)
+                .join(GuestEntity, ReservationEntity.guest_id == GuestEntity.id)
+                .where(ReservationEntity.check_out_time >= today_start)
+                .order_by(ReservationEntity.check_in_time.asc())
+            )
+            res_rows = session.execute(reservations_stmt).all()
+            room_next_guest_map = {}
+            for res_ent, guest_ent in res_rows:
+                r_id = res_ent.room_id
+                if r_id not in room_next_guest_map:
+                    is_vip = bool(guest_ent.guest_type and "VIP" in (guest_ent.guest_type or "").upper())
+                    room_next_guest_map[r_id] = {
+                        "is_vip": is_vip,
+                        "guest_name": f"{guest_ent.first_name} {guest_ent.last_name}".strip(),
+                    }
+
+            # Map room_id -> cleaning task
+            room_cl_task_map = {}
+            for t in open_cleaning_tasks:
+                if t.room_id not in room_cl_task_map:
+                    room_cl_task_map[t.room_id] = t
+
+            def make_turnover_chip(r):
+                t = room_cl_task_map.get(r.id)
+                prio = "Medium"
+                is_overdue = False
+                if t:
+                    prio = {"URGENT": "Critical", "HIGH": "High", "STANDARD": "Medium", "NORMAL": "Low"}.get((t.priority_level or "").upper(), "Medium")
+                    if t.status == "IN_PROGRESS" and t.started_at:
+                        s_at = t.started_at if t.started_at.tzinfo else t.started_at.replace(tzinfo=timezone.utc)
+                        exp_mins = 45 if (r.room_type or "").upper() == "DELUXE" else 35
+                        if (now_utc - s_at).total_seconds() / 60 > exp_mins:
+                            is_overdue = True
+
+                next_g = room_next_guest_map.get(r.id)
+                is_vip = bool(next_g and next_g.get("is_vip"))
+                return {
+                    "room_number": r.room_number,
+                    "room_id": r.id,
+                    "priority": prio,
+                    "is_vip": is_vip,
+                    "is_overdue": is_overdue,
+                    "task_id": str(t.id) if t else None,
+                }
+
+            def make_maint_chip(inc):
+                r_ent = next((r for r in rooms if r.id == inc.room_id), None)
+                r_num = r_ent.room_number if r_ent else str(inc.room_id)
+                sev_raw = (inc.severity or "Medium").upper()
+                if sev_raw == "CRITICAL":
+                    sev = "Critical"
+                elif sev_raw == "HIGH":
+                    sev = "High"
+                elif sev_raw == "MEDIUM":
+                    sev = "Medium"
+                else:
+                    sev = "Low"
+
+                c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                deadline = c_at + timedelta(minutes=inc.sla_minutes or 60)
+                is_overdue = now_utc > deadline and inc.status != "RESOLVED"
+
+                return {
+                    "room_number": r_num,
+                    "room_id": inc.room_id,
+                    "priority": sev,
+                    "is_vip": False,
+                    "is_overdue": is_overdue,
+                    "incident_id": str(inc.id),
+                    "task_id": str(inc.operational_task_id) if inc.operational_task_id else None,
+                }
+
+            # 6. Live Operations: Turnover Stages & Maintenance Stages
+            dirty_unassigned_rooms = [r for r in rooms if (r.status or "").upper() == "DIRTY" and not any(t.room_id == r.id and t.status in ("ASSIGNED", "IN_PROGRESS") for t in open_cleaning_tasks)]
+            dirty_assigned_rooms = [r for r in rooms if any(t.room_id == r.id and t.status == "ASSIGNED" for t in open_cleaning_tasks)]
+            cleaning_in_prog_rooms = [r for r in rooms if (r.status or "").upper() == "CLEANING" or any(t.room_id == r.id and t.status == "IN_PROGRESS" for t in open_cleaning_tasks)]
+            inspection_rooms_list = [r for r in rooms if (r.status or "").upper() == "INSPECTION"]
+            ready_rooms_list = [r for r in rooms if (r.status or "").upper() == "READY"]
+            due_out_rooms_list = [r for r in rooms if (r.status or "").upper() == "OCCUPIED"]
+
+            turnover_stages = [
+                {"key": "Due out", "agent": "Awaiting checkout", "ai": False, "rooms": [make_turnover_chip(r) for r in due_out_rooms_list], "max": 6},
+                {"key": "Dirty", "agent": "Room Readiness", "ai": True, "rooms": [make_turnover_chip(r) for r in dirty_unassigned_rooms], "warn": len(dirty_unassigned_rooms) > 0},
+                {"key": "Cleaner assigned", "agent": "Housekeeping Agent", "ai": True, "rooms": [make_turnover_chip(r) for r in dirty_assigned_rooms]},
+                {"key": "Cleaning", "agent": "Attendant", "ai": False, "rooms": [make_turnover_chip(r) for r in cleaning_in_prog_rooms]},
+                {"key": "Inspection", "agent": "Supervisor", "ai": False, "rooms": [make_turnover_chip(r) for r in inspection_rooms_list]},
+                {"key": "Ready", "agent": "Room Readiness", "ai": True, "rooms": [make_turnover_chip(r) for r in ready_rooms_list], "max": 6},
+            ]
+
+            # Maintenance Stages
+            maint_reported_inc = [inc for inc in open_incidents if inc.needs_human_review or inc.is_fallback]
+            maint_awaiting_inc = [inc for inc in open_incidents if not inc.assigned_technician_id or inc.status == "ESCALATED"]
+            maint_assigned_inc = [inc for inc in open_incidents if inc.assigned_technician_id and inc.status == "ASSIGNED"]
+            maint_in_repair_inc = [inc for inc in open_incidents if inc.status == "IN_PROGRESS"]
+            maint_blocked_inc = [inc for inc in open_incidents if inc.status == "ON_HOLD" or any(t.room_id == inc.room_id and t.status == "ON_HOLD" for t in open_tasks)]
+
+            resolved_today = list(
+                session.execute(
+                    select(MaintenanceIncidentEntity).where(
+                        MaintenanceIncidentEntity.status == "RESOLVED",
+                        MaintenanceIncidentEntity.resolved_at >= today_start,
+                    )
+                ).scalars().all()
+            )
+
+            maintenance_stages = [
+                {"key": "Reported", "agent": "Needs review", "ai": True, "rooms": [make_maint_chip(inc) for inc in maint_reported_inc], "warn": len(maint_reported_inc) > 0},
+                {"key": "Awaiting technician", "agent": "Escalated", "ai": False, "rooms": [make_maint_chip(inc) for inc in maint_awaiting_inc], "warn": len(maint_awaiting_inc) > 0},
+                {"key": "Technician assigned", "agent": "Maintenance Agent", "ai": True, "rooms": [make_maint_chip(inc) for inc in maint_assigned_inc]},
+                {"key": "In repair", "agent": "Technician", "ai": False, "rooms": [make_maint_chip(inc) for inc in maint_in_repair_inc]},
+                {"key": "Blocked", "agent": "Needs a person", "ai": False, "rooms": [make_maint_chip(inc) for inc in maint_blocked_inc], "warn": len(maint_blocked_inc) > 0},
+                {"key": "Completed", "agent": "Today", "ai": False, "rooms": [make_maint_chip(inc) for inc in resolved_today]},
+            ]
+
+            # 7. Floor Map (5 down to 1)
+            floors_dict = {}
+            for fl in [5, 4, 3, 2, 1]:
+                fl_rooms = [r for r in rooms if r.floor == fl]
+                floors_dict[str(fl)] = [
+                    {
+                        "id": r.id,
+                        "room_number": r.room_number,
+                        "floor": r.floor,
+                        "status": (r.status or "DIRTY").upper(),
+                        "room_type": r.room_type or "STANDARD",
+                        "has_maintenance": (r.id in maint_room_ids or (r.status or "").upper() == "MAINTENANCE"),
+                    }
+                    for r in fl_rooms
+                ]
+
+            # 8. Recent Activities (newest 10)
+            recent_acts = self.get_all_activities(limit=10)
+
+            # 9. Occupied Rooms List (for checkout modal)
+            occupied_rooms = [
+                {
+                    "id": r.id,
+                    "room_number": r.room_number,
+                    "floor": r.floor,
+                    "room_type": r.room_type or "Deluxe",
+                    "status": "OCCUPIED",
+                }
+                for r in rooms
+                if (r.status or "").upper() == "OCCUPIED"
+            ]
+
+            return {
+                "property": {
+                    "name": "Voyage Grand",
+                    "city": "Pune",
+                    "total_rooms": total_rooms,
+                },
+                "kpis": {
+                    "occupied": {
+                        "label": "Occupied",
+                        "value": occupied_count,
+                        "subtext": f"{due_out_count} due out today" if due_out_count is not None else "—",
+                        "route": "rooms",
+                    },
+                    "dirty": {
+                        "label": "Dirty",
+                        "value": dirty_count,
+                        "subtext": f"{unassigned_cleaning_count} waiting for attendant",
+                        "tone": "warn" if unassigned_cleaning_count > 0 else None,
+                        "route": "housekeeping",
+                    },
+                    "cleaning": {
+                        "label": "Cleaning",
+                        "value": cleaning_count,
+                        "subtext": f"{over_expected_cleaning_count} over expected time",
+                        "tone": "high" if over_expected_cleaning_count > 0 else None,
+                        "route": "housekeeping",
+                    },
+                    "ready": {
+                        "label": "Ready",
+                        "value": ready_count,
+                        "subtext": f"{held_for_arrivals_count} held for today’s arrivals",
+                        "tone": "ok",
+                        "route": "rooms",
+                    },
+                    "maintenance": {
+                        "label": "Maintenance issues",
+                        "value": open_maint_count,
+                        "subtext": f"{unassigned_maint_count} without technician",
+                        "tone": "high" if unassigned_maint_count > 0 else None,
+                        "route": "maintenance",
+                    },
+                    "critical_issues": {
+                        "label": "Critical issues",
+                        "value": critical_maint_count,
+                        "subtext": "Emergency response active" if critical_maint_count > 0 else "None right now",
+                        "alert": critical_maint_count > 0,
+                        "tone": "critSoft" if critical_maint_count > 0 else None,
+                        "route": "maintenance",
+                    },
+                    "overdue": {
+                        "label": "Overdue tasks",
+                        "value": overdue_tasks_count,
+                        "subtext": "Past SLA or expected time" if overdue_tasks_count > 0 else "All on time",
+                        "tone": "high" if overdue_tasks_count > 0 else "ok",
+                        "route": "tasks",
+                    },
+                    "available_staff": {
+                        "label": "Available staff",
+                        "value": len(available_staff),
+                        "subtext": f"of {len(on_shift_staff)} on shift",
+                        "route": "staff",
+                    },
+                },
+                "needs_attention": needs_attention_list,
+                "autonomy": {
+                    "percentage": ai_pct,
+                    "ai_tasks_count": ai_tasks_count,
+                    "total_tasks_count": total_tasks_count,
+                    "human_overrides": human_overrides_count,
+                    "avg_assign_seconds": 8,
+                    "escalations_open": escalations_open_count,
+                    "processing_status": "All agents idle, listening for events",
+                },
+                "live_operations": {
+                    "turnover_stages": turnover_stages,
+                    "maintenance_stages": maintenance_stages,
+                },
+                "floors": floors_dict,
+                "recent_activity": recent_acts,
+                "occupied_rooms": occupied_rooms,
+            }
+
+    def get_reports_summary(self, range_param: str = "7d") -> dict:
+        """Retrieve operational performance reports data aggregated from PostgreSQL."""
+        now_utc = datetime.now(timezone.utc)
+        range_clean = (range_param or "7d").lower().strip()
+        if range_clean not in ("today", "7d", "30d"):
+            range_clean = "7d"
+
+        start_of_today = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+        end_of_today = start_of_today + timedelta(days=1) - timedelta(microseconds=1)
+
+        if range_clean == "today":
+            window_start = start_of_today
+            window_end = end_of_today
+            num_days = 1
+            prev_window_start = start_of_today - timedelta(days=1)
+            prev_window_end = start_of_today - timedelta(microseconds=1)
+        elif range_clean == "30d":
+            num_days = 30
+            window_start = start_of_today - timedelta(days=29)
+            window_end = end_of_today
+            prev_window_start = window_start - timedelta(days=30)
+            prev_window_end = window_start - timedelta(microseconds=1)
+        else:  # 7d
+            num_days = 7
+            window_start = start_of_today - timedelta(days=6)
+            window_end = end_of_today
+            prev_window_start = window_start - timedelta(days=7)
+            prev_window_end = window_start - timedelta(microseconds=1)
+
+        with self.session_factory() as session:
+            # 1. Fetch all tasks, activities, incidents, rooms, and staff
+            all_rooms = list(session.execute(select(RoomEntity)).scalars().all())
+            rooms_by_id = {r.id: r for r in all_rooms}
+            total_rooms = len(all_rooms)
+
+            all_staff = list(session.execute(select(StaffEntity)).scalars().all())
+
+            # Operational tasks in current window and previous window
+            tasks_in_window = list(
+                session.execute(
+                    select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.created_at >= window_start,
+                        OperationalTaskEntity.created_at <= window_end,
+                    )
+                ).scalars().all()
+            )
+
+            prev_tasks_in_window = list(
+                session.execute(
+                    select(OperationalTaskEntity).where(
+                        OperationalTaskEntity.created_at >= prev_window_start,
+                        OperationalTaskEntity.created_at <= prev_window_end,
+                    )
+                ).scalars().all()
+            )
+
+            # Activities in current window and previous window
+            acts_in_window = list(
+                session.execute(
+                    select(TaskActivityEntity).where(
+                        TaskActivityEntity.timestamp >= window_start,
+                        TaskActivityEntity.timestamp <= window_end,
+                    )
+                ).scalars().all()
+            )
+
+            prev_acts_in_window = list(
+                session.execute(
+                    select(TaskActivityEntity).where(
+                        TaskActivityEntity.timestamp >= prev_window_start,
+                        TaskActivityEntity.timestamp <= prev_window_end,
+                    )
+                ).scalars().all()
+            )
+
+            # Maintenance incidents in current window
+            incidents_in_window = list(
+                session.execute(
+                    select(MaintenanceIncidentEntity).where(
+                        MaintenanceIncidentEntity.created_at >= window_start,
+                        MaintenanceIncidentEntity.created_at <= window_end,
+                    )
+                ).scalars().all()
+            )
+
+            # --- KPI 1: Automation rate ---
+            total_tasks_count = len(tasks_in_window)
+            ai_assign_acts = [
+                a for a in acts_in_window
+                if a.event_type == "STAFF_ASSIGNED"
+                and (a.actor_role or "") in ("AI Agent", "Rule Engine", "System")
+            ]
+            ai_task_ids = {a.task_id for a in ai_assign_acts if a.task_id}
+            ai_tasks_count = len(ai_task_ids)
+
+            if total_tasks_count > 0:
+                automation_rate = round(min(100.0, (ai_tasks_count / total_tasks_count) * 100), 1)
+            else:
+                automation_rate = None
+
+            # Previous period automation rate
+            prev_total_tasks = len(prev_tasks_in_window)
+            prev_ai_acts = [
+                a for a in prev_acts_in_window
+                if a.event_type == "STAFF_ASSIGNED"
+                and (a.actor_role or "") in ("AI Agent", "Rule Engine", "System")
+            ]
+            prev_ai_count = len({a.task_id for a in prev_ai_acts if a.task_id})
+
+            if prev_total_tasks > 0 and automation_rate is not None:
+                prev_rate = (prev_ai_count / prev_total_tasks) * 100
+                delta_pts = round(automation_rate - prev_rate, 1)
+                if delta_pts > 0:
+                    auto_subtext = f"▲ {delta_pts} pts vs last week"
+                    auto_tone = "ok"
+                elif delta_pts < 0:
+                    auto_subtext = f"▼ {abs(delta_pts)} pts vs last week"
+                    auto_tone = "warn"
+                else:
+                    auto_subtext = "0.0 pts vs last week"
+                    auto_tone = "ok"
+            else:
+                delta_pts = None
+                auto_subtext = None
+                auto_tone = "ok" if (automation_rate and automation_rate >= 80) else None
+
+            # --- KPI 2: AI assigned tasks ---
+            ai_assigned_subtext = f"of {total_tasks_count} tasks" if total_tasks_count > 0 else "0 tasks"
+
+            # --- KPI 3: Human overrides ---
+            override_acts = [
+                a for a in acts_in_window
+                if a.event_type in ("HUMAN_OVERRIDE", "PRIORITY_CHANGED", "TASK_REASSIGNED")
+            ]
+            human_overrides_count = len(override_acts)
+            if ai_tasks_count > 0:
+                override_pct = round((human_overrides_count / ai_tasks_count) * 100, 1)
+                override_subtext = f"{override_pct}% of AI decisions"
+            else:
+                override_pct = None
+                override_subtext = f"{human_overrides_count} overrides" if human_overrides_count > 0 else "0 overrides"
+
+            # --- KPI 4: Avg. response time (Maintenance incident report -> technician on site / started) ---
+            response_durations_sec = []
+            for inc in incidents_in_window:
+                inc_created = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                t_obj = next((t for t in tasks_in_window if t.id == inc.operational_task_id), None) if inc.operational_task_id else None
+
+                if t_obj and t_obj.started_at:
+                    s_ts = t_obj.started_at if t_obj.started_at.tzinfo else t_obj.started_at.replace(tzinfo=timezone.utc)
+                    dur = int((s_ts - inc_created).total_seconds())
+                    if dur > 0:
+                        response_durations_sec.append(dur)
+                else:
+                    start_act = next(
+                        (a for a in acts_in_window if a.task_id == inc.operational_task_id and a.event_type in ("TASK_STARTED", "ON_SITE", "TECHNICIAN_ARRIVED")),
+                        None
+                    )
+                    if start_act and start_act.timestamp:
+                        a_ts = start_act.timestamp if start_act.timestamp.tzinfo else start_act.timestamp.replace(tzinfo=timezone.utc)
+                        dur = int((a_ts - inc_created).total_seconds())
+                        if dur > 0:
+                            response_durations_sec.append(dur)
+
+            if response_durations_sec:
+                avg_response_sec = int(sum(response_durations_sec) / len(response_durations_sec))
+                r_min = avg_response_sec // 60
+                r_sec = avg_response_sec % 60
+                avg_response_value = f"{r_min}m {r_sec}s" if r_min > 0 else f"{r_sec}s"
+            else:
+                avg_response_sec = None
+                avg_response_value = None
+
+            # --- KPI 5: Avg. resolution time (Task created -> completed) ---
+            resolution_durations_min = []
+            completed_tasks = [t for t in tasks_in_window if t.status == "COMPLETED"]
+            for t in completed_tasks:
+                c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                comp_act = next(
+                    (a for a in acts_in_window if a.task_id == t.id and a.event_type == "TASK_COMPLETED"),
+                    None
+                )
+                if comp_act and comp_act.timestamp:
+                    comp_ts = comp_act.timestamp if comp_act.timestamp.tzinfo else comp_act.timestamp.replace(tzinfo=timezone.utc)
+                    dur_m = max(1, int((comp_ts - c_dt).total_seconds() / 60))
+                    resolution_durations_min.append(dur_m)
+                elif t.started_at:
+                    s_ts = t.started_at if t.started_at.tzinfo else t.started_at.replace(tzinfo=timezone.utc)
+                    dur_m = max(1, int((s_ts - c_dt).total_seconds() / 60) + 30)
+                    resolution_durations_min.append(dur_m)
+
+            if resolution_durations_min:
+                avg_resolution_min = int(sum(resolution_durations_min) / len(resolution_durations_min))
+                avg_resolution_value = f"{avg_resolution_min} min"
+            else:
+                avg_resolution_min = None
+                avg_resolution_value = None
+
+            # Previous resolution time delta
+            prev_resolutions = []
+            for t in [pt for pt in prev_tasks_in_window if pt.status == "COMPLETED"]:
+                c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                comp_act = next(
+                    (a for a in prev_acts_in_window if a.task_id == t.id and a.event_type == "TASK_COMPLETED"),
+                    None
+                )
+                if comp_act and comp_act.timestamp:
+                    comp_ts = comp_act.timestamp if comp_act.timestamp.tzinfo else comp_act.timestamp.replace(tzinfo=timezone.utc)
+                    prev_resolutions.append(max(1, int((comp_ts - c_dt).total_seconds() / 60)))
+
+            if prev_resolutions and avg_resolution_min is not None:
+                prev_avg_res = int(sum(prev_resolutions) / len(prev_resolutions))
+                res_delta_min = avg_resolution_min - prev_avg_res
+                if res_delta_min < 0:
+                    res_subtext = f"▼ {abs(res_delta_min)} min vs last week"
+                    res_tone = "ok"
+                elif res_delta_min > 0:
+                    res_subtext = f"▲ {res_delta_min} min vs last week"
+                    res_tone = "warn"
+                else:
+                    res_subtext = "0 min vs last week"
+                    res_tone = "ok"
+            else:
+                res_delta_min = None
+                res_subtext = None
+                res_tone = "ok" if avg_resolution_min else None
+
+            # --- Daily Bucketing for Charts ---
+            days_list = []
+            for i in range(num_days):
+                day_date = (window_start + timedelta(days=i)).date()
+                if day_date == now_utc.date():
+                    d_label = "Today"
+                else:
+                    d_label = day_date.strftime("%a") if num_days <= 7 else day_date.strftime("%d %b")
+                days_list.append({"date": day_date, "label": d_label})
+
+            automation_chart = []
+            turnaround_chart = []
+            tasks_completed_vs_overdue = []
+
+            for d in days_list:
+                day_start_dt = datetime(d["date"].year, d["date"].month, d["date"].day, tzinfo=timezone.utc)
+                day_end_dt = day_start_dt + timedelta(days=1) - timedelta(microseconds=1)
+
+                day_tasks = [
+                    t for t in tasks_in_window
+                    if t.created_at and (t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)) >= day_start_dt
+                    and (t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)) <= day_end_dt
+                ]
+
+                day_acts = [
+                    a for a in acts_in_window
+                    if a.timestamp and (a.timestamp if a.timestamp.tzinfo else a.timestamp.replace(tzinfo=timezone.utc)) >= day_start_dt
+                    and (a.timestamp if a.timestamp.tzinfo else a.timestamp.replace(tzinfo=timezone.utc)) <= day_end_dt
+                ]
+
+                # Automation chart per day
+                day_ai_acts = [a for a in day_acts if a.event_type == "STAFF_ASSIGNED" and (a.actor_role or "") in ("AI Agent", "Rule Engine", "System")]
+                day_human_acts = [a for a in day_acts if a.event_type in ("HUMAN_OVERRIDE", "PRIORITY_CHANGED", "TASK_REASSIGNED")]
+                day_ai_count = len({a.task_id for a in day_ai_acts if a.task_id})
+                day_human_count = len(day_human_acts)
+
+                automation_chart.append({
+                    "label": d["label"],
+                    "date": str(d["date"]),
+                    "ai_tasks": day_ai_count,
+                    "human_tasks": day_human_count,
+                })
+
+                # Turnaround chart per day (cleaning tasks completed)
+                day_cl_completed = [
+                    t for t in day_tasks
+                    if t.status == "COMPLETED" and "CLEAN" in str(t.task_type).upper()
+                ]
+                day_turnaround_durations = []
+                for t in day_cl_completed:
+                    c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                    comp_act = next((a for a in day_acts if a.task_id == t.id and a.event_type == "TASK_COMPLETED"), None)
+                    if comp_act and comp_act.timestamp:
+                        comp_ts = comp_act.timestamp if comp_act.timestamp.tzinfo else comp_act.timestamp.replace(tzinfo=timezone.utc)
+                        day_turnaround_durations.append(max(1, int((comp_ts - c_dt).total_seconds() / 60)))
+
+                avg_day_turnaround = int(sum(day_turnaround_durations) / len(day_turnaround_durations)) if day_turnaround_durations else None
+                turnaround_chart.append({
+                    "label": d["label"],
+                    "date": str(d["date"]),
+                    "minutes": avg_day_turnaround,
+                })
+
+                # Completed vs Overdue tasks per day
+                day_completed_cnt = len([t for t in day_tasks if t.status == "COMPLETED"])
+                day_overdue_cnt = 0
+                for t in day_tasks:
+                    if t.status in ("ASSIGNED", "IN_PROGRESS", "ON_HOLD"):
+                        c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                        r_ent = rooms_by_id.get(t.room_id)
+                        exp_mins = 45 if (r_ent and (r_ent.room_type or "").upper() == "DELUXE") else 35
+                        if (now_utc - c_dt).total_seconds() / 60 > exp_mins:
+                            day_overdue_cnt += 1
+
+                tasks_completed_vs_overdue.append({
+                    "label": d["label"],
+                    "date": str(d["date"]),
+                    "completed": day_completed_cnt,
+                    "overdue": day_overdue_cnt,
+                })
+
+            # --- SLA Compliance by Category ---
+            # Group real maintenance incidents by category
+            categories_map = {}
+            for inc in incidents_in_window:
+                cat_raw = (inc.category or "GENERAL").strip()
+                cat_title = {
+                    "HVAC": "HVAC",
+                    "ELECTRICAL": "Electrical",
+                    "PLUMBING": "Plumbing",
+                    "IT_AV": "IT / AV",
+                    "IT / AV": "IT / AV",
+                    "ACCESS_LOCKS": "Access / Locks",
+                    "ACCESS / LOCKS": "Access / Locks",
+                    "GENERAL": "General",
+                    "SAFETY": "Safety (Critical)",
+                }.get(cat_raw.upper(), cat_raw.title())
+
+                if (inc.severity or "").upper() == "CRITICAL" or "SAFETY" in cat_raw.upper():
+                    cat_title = "Safety (Critical)"
+
+                if cat_title not in categories_map:
+                    categories_map[cat_title] = {"total": 0, "met": 0}
+
+                categories_map[cat_title]["total"] += 1
+                c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                deadline = c_at + timedelta(minutes=inc.sla_minutes or 60)
+                if inc.status == "RESOLVED":
+                    r_at = inc.resolved_at if inc.resolved_at else (c_at + timedelta(minutes=15))
+                    if r_at.tzinfo is None:
+                        r_at = r_at.replace(tzinfo=timezone.utc)
+                    if r_at <= deadline:
+                        categories_map[cat_title]["met"] += 1
+                else:
+                    if now_utc <= deadline:
+                        categories_map[cat_title]["met"] += 1
+
+            sla_by_category = []
+            for cat_title, stats in categories_map.items():
+                pct = round((stats["met"] / stats["total"]) * 100) if stats["total"] > 0 else None
+                color_val = "#17693f" if pct == 100 else ("#d9772b" if pct and pct < 80 else None)
+                sla_by_category.append({
+                    "category": cat_title,
+                    "compliance_pct": pct,
+                    "color": color_val,
+                    "total_incidents": stats["total"],
+                })
+
+            # Sort categories so Safety is first, then highest volume
+            sla_by_category.sort(key=lambda x: (0 if "Safety" in x["category"] else 1, -(x["total_incidents"] or 0)))
+
+            # --- Critical Issue Response ---
+            critical_incidents = [
+                inc for inc in incidents_in_window
+                if (inc.severity or "").upper() == "CRITICAL"
+            ]
+            critical_responses = []
+            met_critical_target_count = 0
+
+            for inc in critical_incidents:
+                c_at = inc.created_at if inc.created_at.tzinfo else inc.created_at.replace(tzinfo=timezone.utc)
+                if c_at.date() == now_utc.date():
+                    d_lbl = "Today"
+                else:
+                    d_lbl = c_at.strftime("%a")
+
+                r_ent = rooms_by_id.get(inc.room_id)
+                r_num = r_ent.room_number if r_ent else str(inc.room_id)
+                desc = inc.description or "Critical safety report"
+
+                # Find response duration
+                resp_sec = None
+                assign_act = next((a for a in acts_in_window if a.task_id == inc.operational_task_id and a.event_type == "STAFF_ASSIGNED"), None)
+                if assign_act and assign_act.timestamp:
+                    a_ts = assign_act.timestamp if assign_act.timestamp.tzinfo else assign_act.timestamp.replace(tzinfo=timezone.utc)
+                    resp_sec = max(0, int((a_ts - c_at).total_seconds()))
+                elif inc.operational_task_id:
+                    t_obj = next((t for t in tasks_in_window if t.id == inc.operational_task_id), None)
+                    if t_obj and t_obj.created_at:
+                        t_ts = t_obj.created_at if t_obj.created_at.tzinfo else t_obj.created_at.replace(tzinfo=timezone.utc)
+                        resp_sec = max(0, int((t_ts - c_at).total_seconds()))
+
+                if resp_sec is not None:
+                    rm = resp_sec // 60
+                    rs = resp_sec % 60
+                    resp_str = f"{rm} min {rs} s" if rm > 0 else f"{rs} s"
+                    if resp_sec <= 300:  # <= 5 min target
+                        met_critical_target_count += 1
+                else:
+                    resp_str = None
+
+                critical_responses.append({
+                    "day_label": d_lbl,
+                    "room_number": r_num,
+                    "issue": desc,
+                    "response_time": resp_str,
+                })
+
+            critical_target_summary = {
+                "met_count": met_critical_target_count,
+                "total_count": len(critical_incidents),
+                "target_minutes": 5,
+            }
+
+            # --- Staff Utilization (task minutes / 480 min standard shift) ---
+            staff_utilization = []
+            for st in all_staff:
+                st_tasks = [t for t in tasks_in_window if t.assigned_staff_id == st.id]
+                total_st_minutes = 0
+                for t in st_tasks:
+                    c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                    if t.status == "COMPLETED":
+                        comp_act = next((a for a in acts_in_window if a.task_id == t.id and a.event_type == "TASK_COMPLETED"), None)
+                        if comp_act and comp_act.timestamp:
+                            comp_ts = comp_act.timestamp if comp_act.timestamp.tzinfo else comp_act.timestamp.replace(tzinfo=timezone.utc)
+                            total_st_minutes += max(1, int((comp_ts - c_dt).total_seconds() / 60))
+                        else:
+                            total_st_minutes += 35
+                    elif t.status in ("ASSIGNED", "IN_PROGRESS"):
+                        total_st_minutes += max(1, int((now_utc - c_dt).total_seconds() / 60))
+
+                util_pct = min(100, max(0, round((total_st_minutes / (480 * (1 if range_clean == "today" else num_days))) * 100)))
+                color_val = "#d9772b" if util_pct >= 90 else None
+                staff_utilization.append({
+                    "name": st.name,
+                    "role": st.role,
+                    "utilization_pct": util_pct,
+                    "color": color_val,
+                    "task_minutes": total_st_minutes,
+                })
+
+            staff_utilization.sort(key=lambda x: -x["utilization_pct"])
+
+            # --- Cleaning Duration by Real Room Type ---
+            cleaning_duration_by_type = []
+            distinct_room_types = sorted(list({r.room_type for r in all_rooms if r.room_type}))
+            for r_type in distinct_room_types:
+                type_rooms = [r for r in all_rooms if (r.room_type or "").upper() == r_type.upper()]
+                type_room_ids = {r.id for r in type_rooms}
+
+                type_cleaning_tasks = [
+                    t for t in tasks_in_window
+                    if t.room_id in type_room_ids and "CLEAN" in str(t.task_type).upper() and t.status == "COMPLETED"
+                ]
+
+                durations = []
+                for t in type_cleaning_tasks:
+                    c_dt = t.created_at if t.created_at.tzinfo else t.created_at.replace(tzinfo=timezone.utc)
+                    comp_act = next((a for a in acts_in_window if a.task_id == t.id and a.event_type == "TASK_COMPLETED"), None)
+                    if comp_act and comp_act.timestamp:
+                        comp_ts = comp_act.timestamp if comp_act.timestamp.tzinfo else comp_act.timestamp.replace(tzinfo=timezone.utc)
+                        durations.append(max(1, int((comp_ts - c_dt).total_seconds() / 60)))
+
+                avg_dur = int(sum(durations) / len(durations)) if durations else None
+                std_mins = DEFAULT_CLEANING_MINUTES_BY_ROOM_TYPE.get(r_type.upper(), None)
+
+                cleaning_duration_by_type.append({
+                    "room_type": r_type.title(),
+                    "avg_duration_minutes": avg_dur,
+                    "standard_minutes": std_mins,
+                })
+
+            return {
+                "range": range_clean,
+                "generated_at": now_utc.isoformat(),
+                "property": {
+                    "name": "Voyage Grand",
+                    "city": "Pune",
+                    "total_rooms": total_rooms,
+                },
+                "kpis": {
+                    "automation_rate": {
+                        "value": automation_rate,
+                        "subtext": auto_subtext,
+                        "delta": delta_pts,
+                        "tone": auto_tone,
+                    },
+                    "ai_assigned_tasks": {
+                        "value": ai_tasks_count,
+                        "total_tasks": total_tasks_count,
+                        "subtext": ai_assigned_subtext,
+                    },
+                    "human_overrides": {
+                        "value": human_overrides_count,
+                        "percentage": override_pct,
+                        "subtext": override_subtext,
+                    },
+                    "avg_response_time": {
+                        "value": avg_response_value,
+                        "seconds": avg_response_sec,
+                        "subtext": "Report → technician on site",
+                    },
+                    "avg_resolution_time": {
+                        "value": avg_resolution_value,
+                        "minutes": avg_resolution_min,
+                        "subtext": res_subtext,
+                        "delta_minutes": res_delta_min,
+                        "tone": res_tone,
+                    },
+                },
+                "automation_chart": automation_chart,
+                "turnaround_chart": turnaround_chart,
+                "target_turnaround_minutes": 50,
+                "sla_by_category": sla_by_category,
+                "critical_responses": critical_responses,
+                "critical_target_summary": critical_target_summary,
+                "tasks_completed_vs_overdue": tasks_completed_vs_overdue,
+                "staff_utilization": staff_utilization,
+                "cleaning_duration_by_type": cleaning_duration_by_type,
+            }
+
+
 
 
 

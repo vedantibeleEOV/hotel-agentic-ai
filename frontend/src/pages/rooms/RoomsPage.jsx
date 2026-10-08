@@ -1,13 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { useRooms } from '../../hooks/useRooms';
+import { useHotel } from '../../context/HotelContext';
+import { hotelApi } from '../../api/hotelApi';
 import StatusChips from './StatusChips';
 import RoomFilters from './RoomFilters';
 import ViewToggle from './ViewToggle';
 import RoomsGrid from './RoomsGrid';
 import RoomsTable from './RoomsTable';
-import { Search, RefreshCw, AlertCircle } from 'lucide-react';
+import CheckoutConfirmModal from './CheckoutConfirmModal';
+import { Search, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function RoomsPage() {
+  const { refreshData } = useHotel();
+
   // Filter & view state
   const [view, setView] = useState('grid');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -20,6 +25,12 @@ export default function RoomsPage() {
     arrivingSoon: false,
     maintOpen: false,
   });
+
+  // Checkout modal state
+  const [checkoutRoom, setCheckoutRoom] = useState(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
 
   const { rooms, summary, loading, error, refreshRooms } = useRooms(filters);
 
@@ -38,6 +49,43 @@ export default function RoomsPage() {
       arrivingSoon: false,
       maintOpen: false,
     });
+  };
+
+  const handleOpenCheckout = (room) => {
+    setCheckoutRoom(room);
+    setCheckoutError(null);
+  };
+
+  const handleConfirmCheckout = async () => {
+    if (!checkoutRoom || checkoutLoading) return;
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+
+    try {
+      const payload = {
+        property_id: checkoutRoom.property_id || 1,
+        room_id: checkoutRoom.id,
+        reservation_id: checkoutRoom.reservation_id || 5001,
+        checkout_time: new Date().toISOString(),
+      };
+
+      await hotelApi.processCheckout(payload);
+
+      const rNum = checkoutRoom.room_number || checkoutRoom.id;
+      setCheckoutRoom(null);
+      setToastMessage(`Room ${rNum} checked out successfully`);
+      setTimeout(() => setToastMessage(null), 4000);
+
+      // Refresh both local rooms list and global hotel context
+      await Promise.allSettled([
+        refreshRooms(),
+        refreshData ? refreshData() : Promise.resolve(),
+      ]);
+    } catch (err) {
+      setCheckoutError(err.message || 'Failed to check out room');
+    } finally {
+      setCheckoutLoading(false);
+    }
   };
 
   // Status counts derived directly from backend summary (or fallback from live room entities)
@@ -108,8 +156,7 @@ export default function RoomsPage() {
     });
   }, [rooms, selectedStatus, filters]);
 
-  // Dynamic header subtitle: "{total} rooms · {ready} ready · {turnover} in turnover"
-  // turnover = DIRTY + CLEANING + INSPECTION
+  // Dynamic header subtitle
   const summaryText = useMemo(() => {
     if (summary) {
       const total = summary.total ?? 0;
@@ -138,6 +185,14 @@ export default function RoomsPage() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-[#222222] text-white rounded-xl shadow-lg border border-white/10 animate-slide-down">
+          <CheckCircle2 size={16} className="text-emerald-400" />
+          <span className="text-xs font-semibold">{toastMessage}</span>
+        </div>
+      )}
+
       {/* 1. Page Header & View Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -149,7 +204,7 @@ export default function RoomsPage() {
           <button
             onClick={refreshRooms}
             title="Refresh room data"
-            className="p-2 rounded-xl border border-[#dddddd] bg-white text-[#6a6a6a] hover:text-[#222222] hover:bg-[#f7f7f7] transition-all"
+            className="p-2 rounded-xl border border-[#dddddd] bg-white text-[#6a6a6a] hover:text-[#222222] hover:bg-[#f7f7f7] transition-all cursor-pointer"
           >
             <RefreshCw size={15} />
           </button>
@@ -209,13 +264,36 @@ export default function RoomsPage() {
         !error && (
           <div>
             {view === 'grid' ? (
-              <RoomsGrid rooms={filteredRooms} summary={summary} />
+              <RoomsGrid
+                rooms={filteredRooms}
+                summary={summary}
+                onCheckout={handleOpenCheckout}
+              />
             ) : (
-              <RoomsTable rooms={filteredRooms} summary={summary} />
+              <RoomsTable
+                rooms={filteredRooms}
+                summary={summary}
+                onCheckout={handleOpenCheckout}
+              />
             )}
           </div>
         )
       )}
+
+      {/* Checkout Confirm Dialog Modal */}
+      <CheckoutConfirmModal
+        room={checkoutRoom}
+        isOpen={Boolean(checkoutRoom)}
+        onClose={() => {
+          if (!checkoutLoading) {
+            setCheckoutRoom(null);
+            setCheckoutError(null);
+          }
+        }}
+        onConfirm={handleConfirmCheckout}
+        loading={checkoutLoading}
+        error={checkoutError}
+      />
     </div>
   );
 }

@@ -47,7 +47,9 @@ export const HotelProvider = ({ children }) => {
     setTraces((prev) => [newTrace, ...prev.slice(0, 99)]);
   }, []);
 
-  // Fetch backend status & tasks & rooms summary
+  const [attentionCount, setAttentionCount] = useState(0);
+
+  // Fetch backend status & tasks & rooms summary & attention items
   const refreshData = useCallback(async () => {
     try {
       const health = await hotelApi.checkHealth();
@@ -55,15 +57,20 @@ export const HotelProvider = ({ children }) => {
       setIsOnline(online);
 
       if (online) {
-        const [fetchedTasks, fetchedSummary, fetchedRooms] = await Promise.allSettled([
+        const [fetchedTasks, fetchedSummary, fetchedRooms, fetchedDashboard] = await Promise.allSettled([
           hotelApi.getTasks(),
           hotelApi.getRoomsSummary(),
           hotelApi.getRooms(),
+          hotelApi.getDashboardSummary(),
         ]);
         if (fetchedTasks.status === 'fulfilled') setTasks(fetchedTasks.value);
         if (fetchedSummary.status === 'fulfilled') setRoomsSummary(fetchedSummary.value);
         if (fetchedRooms.status === 'fulfilled' && Array.isArray(fetchedRooms.value)) {
           setRooms(fetchedRooms.value);
+        }
+        if (fetchedDashboard.status === 'fulfilled' && fetchedDashboard.value) {
+          const count = fetchedDashboard.value.needs_attention?.length ?? 0;
+          setAttentionCount(count);
         }
       }
     } catch (err) {
@@ -78,6 +85,14 @@ export const HotelProvider = ({ children }) => {
     refreshData();
     addTrace('OPERATIONS_ORCHESTRATOR', 'INITIALIZE_SYSTEM', 'Autonomous Hotel System Ready', 'COMPLETED');
   }, [refreshData, addTrace]);
+
+  // Global 10-second polling for active data sync
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshData();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [refreshData]);
 
   // Simulation loop ticker
   useEffect(() => {
@@ -199,6 +214,7 @@ export const HotelProvider = ({ children }) => {
     isOnline,
     simulationActive,
     activeTab,
+    attentionCount,
     metrics,
     selectedTaskForReassign,
     setActiveTab,

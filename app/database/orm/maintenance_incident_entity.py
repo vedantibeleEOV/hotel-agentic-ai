@@ -35,6 +35,8 @@ class MaintenanceIncidentEntity(Base):
     needs_human_review = Column(Boolean, nullable=True, default=False)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     original_ai_decision = Column(JSON, nullable=True)
+    blocks_housekeeping = Column(Boolean, nullable=True, default=True)
+    housekeeping_hold_reason = Column(String(500), nullable=True)
 
     room = relationship("RoomEntity")
     reported_by_staff = relationship("StaffEntity", foreign_keys=[reported_by_staff_id])

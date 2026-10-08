@@ -57,6 +57,26 @@ export const hotelApi = {
   },
 
   /**
+   * READ: Fetch all activity audit trail events from database
+   */
+  async getActivities(params = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.kind && params.kind !== 'All') searchParams.append('kind', params.kind);
+    if (params.event_type && params.event_type !== 'All') searchParams.append('event_type', params.event_type);
+    if (params.search) searchParams.append('search', params.search);
+    if (params.limit) searchParams.append('limit', params.limit);
+    if (params.offset) searchParams.append('offset', params.offset);
+
+    const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    const res = await fetch(`${API_BASE}/activities${query}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to fetch activities');
+    }
+    return await res.json();
+  },
+
+  /**
    * READ: Fetch specific task details
    */
   async getTaskById(taskId) {
@@ -393,6 +413,30 @@ export const hotelApi = {
   },
 
   /**
+   * READ: Fetch live Dashboard Command Center summary
+   */
+  async getDashboardSummary() {
+    const res = await fetch(`${API_BASE}/dashboard/summary`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch dashboard summary (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
+   * READ: Fetch Operational Reports Summary
+   */
+  async getReportsSummary(range = '7d') {
+    const res = await fetch(`${API_BASE}/reports/summary?range=${encodeURIComponent(range)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch reports summary (HTTP ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  /**
    * DELETE / RESET: Reset database state and seed data back to initial state
    */
   async resetSystem() {
@@ -407,4 +451,5 @@ export const hotelApi = {
     return await res.json();
   },
 };
+
 

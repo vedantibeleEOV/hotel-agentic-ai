@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Wrench, Lock, AlertCircle } from 'lucide-react';
+import { Star, Wrench, Lock, AlertCircle, LogOut } from 'lucide-react';
 import { ROOM_STATUS_COLORS } from './StatusChips';
 
 export function StatusPill({ status }) {
@@ -43,13 +43,16 @@ export function PriorityPill({ priority }) {
   );
 }
 
-export default function RoomCard({ room, onClick }) {
+export default function RoomCard({ room, onClick, onCheckout }) {
   const isCritical = room.maint || room.priority === 'Critical';
+  const isOccupied =
+    room.status === 'Occupied' ||
+    (room.raw_status || '').toUpperCase() === 'OCCUPIED';
 
   return (
-    <button
+    <div
       onClick={() => onClick?.(room)}
-      className={`bg-white border border-[#dddddd] rounded-xl p-3.5 flex flex-col gap-1.5 text-left transition-all hover:shadow-float ${
+      className={`bg-white border border-[#dddddd] rounded-xl p-3.5 flex flex-col gap-1.5 text-left transition-all hover:shadow-float relative group ${
         isCritical ? 'border-2 border-[#c13515]' : ''
       }`}
     >
@@ -77,26 +80,44 @@ export default function RoomCard({ room, onClick }) {
         )}
       </div>
 
-      {/* Footer Badges */}
-      <div className="flex items-center gap-1 flex-wrap pt-1 min-h-[22px]">
-        {room.vip && (
-          <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#222222] text-white text-[11px] font-semibold">
-            <Star size={10} className="fill-white" />
-            <span>VIP</span>
-          </span>
-        )}
+      {/* Footer Badges & Actions */}
+      <div className="flex items-center justify-between gap-1 flex-wrap pt-1 min-h-[24px]">
+        <div className="flex items-center gap-1 flex-wrap">
+          {room.vip && (
+            <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#222222] text-white text-[11px] font-semibold">
+              <Star size={10} className="fill-white" />
+              <span>VIP</span>
+            </span>
+          )}
 
-        {['Dirty', 'Cleaning', 'Inspection'].includes(room.status) && room.priority !== 'Low' && (
-          <PriorityPill priority={room.priority} />
-        )}
+          {['Dirty', 'Cleaning', 'Inspection'].includes(room.status) && room.priority !== 'Low' && (
+            <PriorityPill priority={room.priority} />
+          )}
 
-        {room.maint && (
-          <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#f1e9f7] text-[#653886] text-[11px] font-semibold">
-            <Wrench size={10} />
-            <span>{room.maintCategory || 'Issue'}</span>
-          </span>
+          {room.maint && (
+            <span className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-[#f1e9f7] text-[#653886] text-[11px] font-semibold">
+              <Wrench size={10} />
+              <span>{room.maintCategory || 'Issue'}</span>
+            </span>
+          )}
+        </div>
+
+        {/* Checkout Action Button for Occupied Rooms */}
+        {isOccupied && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCheckout?.(room);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#fde9e5] text-[#ff385c] hover:bg-[#ff385c] hover:text-white active:scale-95 transition-all text-[11px] font-semibold cursor-pointer border border-[#f8bbb0] shadow-2xs ml-auto"
+            title={`Check out Room ${room.room_number || room.id}`}
+          >
+            <LogOut size={11} strokeWidth={2.5} />
+            <span>Check out</span>
+          </button>
         )}
       </div>
-    </button>
+    </div>
   );
 }

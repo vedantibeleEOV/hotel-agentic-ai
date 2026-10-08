@@ -169,4 +169,66 @@ def get_critical_safety_triggers() -> list[str]:
     return triggers if triggers else ["gas", "smoke", "fire", "spark", "electric shock", "shock", "explosion"]
 
 
+HOUSEKEEPING_BLOCKING_CATEGORIES = ("HVAC", "PLUMBING", "ELECTRICAL", "SAFETY")
+
+HOUSEKEEPING_NON_BLOCKING_KEYWORDS = [
+    "remote", "tv remote", "bulb", "lamp", "light bulb", "flicker", "flickering",
+    "loose chair", "wobbly chair", "chair", "table", "drawer", "paint", "scuff",
+    "curtain hook", "curtain", "socket cover", "cosmetic", "hanger", "pillow"
+]
+
+HOUSEKEEPING_BLOCKING_KEYWORDS = [
+    "ac", "a/c", "air condition", "air conditioning", "air conditioner", "heating", "hvac", "thermostat",
+    "leak", "water", "flood", "toilet", "shower", "drain", "pipe", "clog", "burst", "sink", "faucet",
+    "spark", "fire", "smoke", "gas", "burn", "burning", "shock", "electric shock", "short circuit",
+    "blackout", "power cut", "exposed", "lock", "jammed", "door", "keycard", "trapped",
+    "bed", "broken bed", "glass", "window", "hazard"
+]
+
+
+def evaluate_blocks_housekeeping(
+    category: str,
+    severity: str,
+    description: str = "",
+    is_safety_rule_applied: bool = False,
+) -> tuple[bool, str]:
+    """
+    Determines whether a maintenance issue blocks housekeeping cleaning.
+    Returns (blocks: bool, reason: str).
+    """
+    cat_upper = (category or "").upper()
+    sev_upper = (severity or "").upper()
+    desc_lower = (description or "").lower()
+
+    # 1. Critical severity or safety rule triggers always block cleaning
+    if sev_upper == "CRITICAL" or is_safety_rule_applied:
+        return True, "Critical safety issue requires immediate resolution before cleaning"
+
+    # 2. Explicit non-blocking check for minor/cosmetic items
+    for nb in HOUSEKEEPING_NON_BLOCKING_KEYWORDS:
+        if nb in desc_lower:
+            has_major_blocker = any(b in desc_lower for b in ["spark", "fire", "smoke", "flood", "leak", "shock", "burst", "ac", "hvac", "broken bed"])
+            if not has_major_blocker and sev_upper in ("LOW", "MEDIUM") and cat_upper in ("FURNITURE", "GENERAL", "ELECTRICAL"):
+                return False, f"Minor non-interfering issue ('{nb}') does not block room cleaning"
+
+    # 3. Blocking categories (HVAC, PLUMBING, SAFETY, or High Electrical)
+    if cat_upper in ("HVAC", "PLUMBING", "SAFETY"):
+        return True, f"{cat_upper} issue affects room readiness and blocks cleaning"
+
+    if cat_upper == "ELECTRICAL" and sev_upper in ("HIGH", "CRITICAL"):
+        return True, "High/Critical electrical issue poses safety hazard to housekeeping"
+
+    # 4. Keyword checks for blocking conditions
+    for b in HOUSEKEEPING_BLOCKING_KEYWORDS:
+        if b in desc_lower:
+            return True, f"Issue involves '{b}' which impacts room readiness/safety"
+
+    # 5. Severity-based fallback
+    if sev_upper in ("HIGH", "CRITICAL"):
+        return True, f"{sev_upper} severity maintenance blocks room readiness"
+
+    return False, "Minor maintenance issue does not prevent room cleaning"
+
+
+
 

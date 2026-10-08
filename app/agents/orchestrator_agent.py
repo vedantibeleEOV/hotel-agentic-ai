@@ -1,6 +1,8 @@
 from typing import Any, Optional, Union
 from uuid import uuid4
+from datetime import datetime, timezone
 from app.agents.issue_classifier_agent import IssueClassifierAgent
+from app.config import evaluate_blocks_housekeeping
 from app.models.checkout_event import CheckoutEvent
 from app.models.enums import MaintenanceCategory, MaintenanceSeverity, RoomStatus, TaskStatus, TaskType
 from app.models.maintenance_issue_report import MaintenanceIssueReport
@@ -67,7 +69,6 @@ class OperationsOrchestratorAgent:
             raise ValueError(f"Room with ID {issue.room_id} not found.")
 
         # If category or severity is missing, auto-classify using IssueClassifierAgent with fallback
-        classify_res = None
         if issue.category is None or issue.severity is None:
             is_valid, classified_cat, classified_sev, _ = (
                 self.classifier_agent.classify_with_fallback(issue.description)
@@ -84,46 +85,39 @@ class OperationsOrchestratorAgent:
             issue.category = classified_cat
             issue.severity = classified_sev
 
-        # Determine affects_room_readiness:
-        # Non-disruptive issues (TV remote, lights, phone, minor electronics) do NOT block cleaning or affect readiness
-        desc_lower = (issue.description or "").lower()
-        NON_READINESS_BLOCKING_KEYWORDS = (
-            "remote", "tv", "television", "bulb", "lamp", "light", "flicker",
-            "battery", "kettle", "phone", "telephone", "wifi", "chair", "curtain", "hanger"
-        )
-        READINESS_BLOCKING_KEYWORDS = (
-            "leak", "water", "flood", "drain", "toilet", "clog", "pipe", "plumb",
-            "spark", "fire", "smoke", "gas", "burn", "shock", "lock", "plaster", "glass"
-        )
+        cat_val = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
+        sev_val = issue.severity.value if hasattr(issue.severity, "value") else str(issue.severity)
 
-        if issue.affects_room_readiness is not None:
-            affects_room_readiness = bool(issue.affects_room_readiness)
-        elif any(kw in desc_lower for kw in NON_READINESS_BLOCKING_KEYWORDS) and not any(kw in desc_lower for kw in READINESS_BLOCKING_KEYWORDS):
-            affects_room_readiness = False
-        elif any(kw in desc_lower for kw in READINESS_BLOCKING_KEYWORDS):
-            affects_room_readiness = True
-        elif issue.severity in (MaintenanceSeverity.CRITICAL, MaintenanceSeverity.HIGH) or str(issue.severity).upper() in ("CRITICAL", "HIGH"):
-            affects_room_readiness = True
-        elif classify_res and classify_res.get("affects_room_readiness") is not None:
-            affects_room_readiness = bool(classify_res.get("affects_room_readiness"))
+        # Determine whether issue blocks housekeeping
+        if issue.blocks_housekeeping is not None:
+            blocks_housekeeping = bool(issue.blocks_housekeeping)
+            hold_reason = issue.housekeeping_hold_reason or ("Manager override" if issue.is_human_override else "Manual flag")
         else:
-            affects_room_readiness = False
+            blocks_housekeeping, hold_reason = evaluate_blocks_housekeeping(
+                category=cat_val,
+                severity=sev_val,
+                description=issue.description or "",
+                is_safety_rule_applied=bool(issue.safety_rule_applied or sev_val.upper() == "CRITICAL"),
+            )
 
-        issue.affects_room_readiness = affects_room_readiness
+        issue.blocks_housekeeping = blocks_housekeeping
+        issue.housekeeping_hold_reason = hold_reason
+        issue.affects_room_readiness = blocks_housekeeping
 
         room_status_str = room.status.value if hasattr(room.status, "value") else str(room.status)
         is_occupied = (room_status_str == "OCCUPIED")
 
         event_id = uuid4()
-        category_str = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
+        category_str = cat_val
 
         # Decision Logic:
-        # Rule 1: Room in turnaround flow (NOT OCCUPIED) AND affects_room_readiness is True
+        # Rule 1: Room in turnaround flow (NOT OCCUPIED) AND blocks_housekeeping is True
         # -> Trigger Maintenance FIRST; hold/defer Housekeeping until maintenance completes.
-        if not is_occupied and affects_room_readiness:
+        if not is_occupied and blocks_housekeeping:
             # Find any active Housekeeping cleaning task for this room and update to ON_HOLD
+            all_tasks = list(self.repository.operational_tasks.values()) if hasattr(self.repository, "operational_tasks") else []
             active_cleaning_tasks = [
-                t for t in self.repository.operational_tasks.values()
+                t for t in all_tasks
                 if t.room_id == issue.room_id
                 and (t.task_type == TaskType.ROOM_CLEANING or getattr(t.task_type, "value", str(t.task_type)) == "ROOM_CLEANING")
                 and (t.status in (TaskStatus.ASSIGNED, TaskStatus.PENDING, TaskStatus.IN_PROGRESS) or getattr(t.status, "value", str(t.status)) in ("ASSIGNED", "PENDING", "IN_PROGRESS"))
@@ -131,7 +125,27 @@ class OperationsOrchestratorAgent:
             for task in active_cleaning_tasks:
                 prev_status_str = task.status.value if hasattr(task.status, "value") else str(task.status)
                 task.status = TaskStatus.ON_HOLD
+                note_suffix = f"On hold: {hold_reason}"
+                if task.notes:
+                    if note_suffix not in task.notes:
+                        task.notes = f"{task.notes} | {note_suffix}"
+                else:
+                    task.notes = note_suffix
+
                 self.repository.save_operational_task(task)
+
+                if hasattr(self.repository, "log_activity"):
+                    self.repository.log_activity(
+                        task_id=task.id,
+                        room_id=issue.room_id,
+                        event_type="TASK_BLOCKED",
+                        title="Task blocked",
+                        actor_name="Maintenance Agent",
+                        actor_role="AI Agent",
+                        action="Housekeeping paused for maintenance",
+                        outcome=hold_reason,
+                    )
+
                 self.activity_logs.append({
                     "agent": "OPERATIONS_ORCHESTRATOR",
                     "action": "HOLD_HOUSEKEEPING_TASK",
@@ -139,7 +153,7 @@ class OperationsOrchestratorAgent:
                     "task_id": str(task.id),
                     "previous_task_status": prev_status_str,
                     "new_task_status": TaskStatus.ON_HOLD.value,
-                    "reason": "Maintenance issue affects room readiness; pausing housekeeping task until maintenance completion.",
+                    "reason": hold_reason,
                     "status": "COMPLETED",
                 })
 
@@ -152,7 +166,7 @@ class OperationsOrchestratorAgent:
                 reservation_id=None,
                 next_reservation_id=None,
                 status="ROUTED",
-                reason=f"Maintenance issue '{category_str}' affects room readiness during turnaround; executing Maintenance first before Housekeeping.",
+                reason=f"Maintenance issue '{category_str}' blocks housekeeping during turnaround; executing Maintenance first before Housekeeping.",
             )
 
             log_entry = {
@@ -169,7 +183,7 @@ class OperationsOrchestratorAgent:
             self.activity_logs.append(log_entry)
             return result
 
-        # Rule 2 & 3: affects_room_readiness is False OR room is OCCUPIED
+        # Rule 2 & 3: blocks_housekeeping is False OR room is OCCUPIED
         # -> Standard Maintenance routing (Housekeeping proceeds normally / independently).
         result = OrchestrationResult(
             event_id=event_id,
@@ -180,7 +194,7 @@ class OperationsOrchestratorAgent:
             reservation_id=None,
             next_reservation_id=None,
             status="ROUTED",
-            reason=f"Maintenance issue reported: {category_str}; routing to maintenance agent.",
+            reason=f"Maintenance issue reported: {category_str}; routing to maintenance agent (Housekeeping unaffected).",
         )
 
         log_entry = {
@@ -190,7 +204,7 @@ class OperationsOrchestratorAgent:
             "workflow": "MAINTENANCE_TICKET",
             "next_agent": "MAINTENANCE_AGENT",
             "room_id": issue.room_id,
-            "affects_room_readiness": affects_room_readiness if not is_occupied else None,
+            "affects_room_readiness": blocks_housekeeping if not is_occupied else None,
             "is_occupied": is_occupied,
             "status": "COMPLETED",
         }
@@ -208,8 +222,9 @@ class OperationsOrchestratorAgent:
             return None
 
         # Find the housekeeping task for that room_id that is currently ON_HOLD and update back to ASSIGNED
+        all_tasks = list(self.repository.operational_tasks.values()) if hasattr(self.repository, "operational_tasks") else []
         on_hold_tasks = [
-            t for t in self.repository.operational_tasks.values()
+            t for t in all_tasks
             if t.room_id == room_id
             and (t.task_type == TaskType.ROOM_CLEANING or getattr(t.task_type, "value", str(t.task_type)) == "ROOM_CLEANING")
             and (t.status == TaskStatus.ON_HOLD or getattr(t.status, "value", str(t.status)) == "ON_HOLD")
@@ -218,6 +233,19 @@ class OperationsOrchestratorAgent:
             prev_status_str = task.status.value if hasattr(task.status, "value") else str(task.status)
             task.status = TaskStatus.ASSIGNED
             self.repository.save_operational_task(task)
+
+            if hasattr(self.repository, "log_activity"):
+                self.repository.log_activity(
+                    task_id=task.id,
+                    room_id=room_id,
+                    event_type="TASK_RESUMED",
+                    title="Task resumed",
+                    actor_name="Operations Orchestrator",
+                    actor_role="AI Agent",
+                    action="Cleaning resumed following maintenance resolution",
+                    outcome="Assigned",
+                )
+
             self.activity_logs.append({
                 "agent": "OPERATIONS_ORCHESTRATOR",
                 "action": "RELEASE_HOUSEKEEPING_TASK",
@@ -265,4 +293,5 @@ class OperationsOrchestratorAgent:
         }
         self.activity_logs.append(log_entry)
         return result
+
 

@@ -71,12 +71,14 @@ def get_current_user(
             if staff:
                 staff_name = staff.name
 
+        display_name = staff_name or user.username.replace(".", " ").title()
+
         return {
             "id": user.id,
             "username": user.username,
             "role": user.role,
             "staff_id": user.staff_id,
-            "name": staff_name or user.username,
+            "name": display_name,
             "is_active": user.is_active,
         }
 

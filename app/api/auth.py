@@ -81,7 +81,7 @@ async def login_endpoint(payload: LoginRequest):
             if staff:
                 staff_name = staff.name
 
-        display_name = staff_name or user.username.title()
+        display_name = staff_name or user.username.replace(".", " ").title()
 
         access_token = create_access_token(
             user_id=user.id,

@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Ensure project root is in sys.path when executed directly
@@ -59,6 +59,8 @@ def seed_rooms(session) -> tuple[int, int]:
     existing_numbers = set(session.execute(existing_rooms_stmt).scalars().all())
 
     # 2. Add or reset remaining 48 rooms across floors 1 to 5
+    occupied_numbers = {"101", "201", "301", "401", "501", "405"}
+
     for floor in range(1, 6):
         for room_idx in range(1, 11):
             room_number = f"{floor}{room_idx:02d}"
@@ -66,7 +68,12 @@ def seed_rooms(session) -> tuple[int, int]:
                 continue
 
             room_type = "DELUXE" if room_idx <= 5 else "STANDARD"
-            status = "DIRTY" if room_idx in (3, 7) else "READY"
+            if room_number in occupied_numbers:
+                status = "OCCUPIED"
+            elif room_idx in (3, 7):
+                status = "DIRTY"
+            else:
+                status = "READY"
 
             if room_number not in existing_numbers:
                 session.add(
@@ -125,12 +132,11 @@ def seed_db() -> dict:
         session.execute(text("DELETE FROM task_activities;"))
         session.execute(text("DELETE FROM maintenance_incidents;"))
         session.execute(text("DELETE FROM operational_tasks;"))
-        # Clear any test-injected non-seed rows to avoid leaks
-        session.execute(text("DELETE FROM reservations WHERE id NOT IN (5001, 5002, 5003, 5004, 5005);"))
+        # Clear any test-injected non-seed rows to avoid leaks (preserve 5001-5006, never touch users)
+        session.execute(text("DELETE FROM reservations WHERE id NOT IN (5001, 5002, 5003, 5004, 5005, 5006);"))
         session.execute(text("DELETE FROM guests WHERE id NOT IN (101, 102);"))
         session.execute(text("DELETE FROM staff WHERE id NOT IN (201, 202, 203, 301, 302, 303);"))
         session.commit()
-
 
         # 1. Rooms Seed Data
         rooms_inserted, rooms_skipped = seed_rooms(session)
@@ -163,46 +169,64 @@ def seed_db() -> dict:
         # Flush rooms and guests to ensure foreign key availability
         session.flush()
 
-        # 3. Reservations Seed Data
+        # Map room_number to actual database room id
+        room_by_number = {
+            r.room_number: r.id
+            for r in session.execute(select(RoomEntity).where(RoomEntity.property_id == 1)).scalars().all()
+        }
+
+        # 3. Reservations Seed Data (6 OCCUPIED rooms with active reservations covering current time)
+        now_utc = datetime.now(timezone.utc)
+        ci_time = now_utc - timedelta(days=1)
+        co_time = now_utc + timedelta(days=1)
+
         reservations_data = [
             {
                 "id": 5001,
                 "guest_id": 101,
-                "room_id": 1,
-                "check_in_time": datetime(2026, 8, 28, 14, 0, tzinfo=timezone.utc),
-                "check_out_time": datetime(2026, 8, 29, 10, 0, tzinfo=timezone.utc),
+                "room_id": room_by_number["101"],
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
                 "early_check_in_requested": False,
             },
             {
                 "id": 5002,
                 "guest_id": 102,
-                "room_id": 2,
-                "check_in_time": datetime(2026, 8, 29, 13, 0, tzinfo=timezone.utc),
-                "check_out_time": datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc),
+                "room_id": room_by_number["201"],
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
                 "early_check_in_requested": True,
             },
             {
                 "id": 5003,
                 "guest_id": 101,
-                "room_id": 1,
-                "check_in_time": datetime(2026, 8, 29, 14, 0, tzinfo=timezone.utc),
-                "check_out_time": datetime(2026, 8, 30, 10, 0, tzinfo=timezone.utc),
+                "room_id": room_by_number["301"],
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
                 "early_check_in_requested": False,
             },
             {
                 "id": 5004,
-                "guest_id": 101,
-                "room_id": 1,
-                "check_in_time": datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc),
-                "check_out_time": datetime(2026, 8, 31, 10, 0, tzinfo=timezone.utc),
+                "guest_id": 102,
+                "room_id": room_by_number["401"],
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
                 "early_check_in_requested": False,
             },
             {
                 "id": 5005,
                 "guest_id": 101,
-                "room_id": 1,
-                "check_in_time": datetime(2026, 9, 1, 14, 0, tzinfo=timezone.utc),
-                "check_out_time": datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc),
+                "room_id": room_by_number["501"],
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
+                "early_check_in_requested": False,
+            },
+            {
+                "id": 5006,
+                "guest_id": 102,
+                "room_id": room_by_number.get("405", 1),
+                "check_in_time": ci_time,
+                "check_out_time": co_time,
                 "early_check_in_requested": False,
             },
         ]
@@ -214,6 +238,9 @@ def seed_db() -> dict:
             else:
                 existing.room_id = item["room_id"]
                 existing.guest_id = item["guest_id"]
+                existing.check_in_time = item["check_in_time"]
+                existing.check_out_time = item["check_out_time"]
+                existing.early_check_in_requested = item["early_check_in_requested"]
                 skipped_counts["reservations"] += 1
 
         # 4. Staff Seed Data

@@ -1,7 +1,7 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
 /**
- * Enhanced fetch wrapper that attaches JWT Bearer token and intercepts 401s
+ * Enhanced fetch wrapper that attaches JWT Bearer token and intercepts 401s / 403s
  */
 async function authFetch(url, options = {}) {
   const token = localStorage.getItem('voyage_token');
@@ -22,6 +22,12 @@ async function authFetch(url, options = {}) {
     localStorage.removeItem('voyage_token');
     localStorage.removeItem('voyage_user');
     window.dispatchEvent(new CustomEvent('voyage_unauthorized'));
+  } else if (res.status === 403) {
+    const clone = res.clone();
+    clone.json().then((data) => {
+      const msg = data.detail || 'You do not have permission to perform this action.';
+      window.dispatchEvent(new CustomEvent('voyage_forbidden', { detail: { message: msg } }));
+    }).catch(() => {});
   }
 
   return res;
@@ -64,7 +70,8 @@ export const hotelApi = {
    */
   async checkHealth() {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/health');
+      const healthUrl = API_BASE.endsWith('/api') ? `${API_BASE}/v1/health` : `${API_BASE}/api/v1/health`;
+      const res = await fetch(healthUrl);
       if (!res.ok) throw new Error('Health check failed');
       return await res.json();
     } catch {

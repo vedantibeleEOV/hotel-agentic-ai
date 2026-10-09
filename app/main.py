@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
             conn.execute(text("SELECT 1"))
             conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS blocks_housekeeping BOOLEAN DEFAULT TRUE;"))
             conn.execute(text("ALTER TABLE maintenance_incidents ADD COLUMN IF NOT EXISTS housekeeping_hold_reason VARCHAR(500);"))
+            conn.execute(text("ALTER TABLE maintenance_incidents ALTER COLUMN reported_by_staff_id DROP NOT NULL;"))
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,

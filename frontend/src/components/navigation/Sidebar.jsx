@@ -1,5 +1,6 @@
 import React from 'react';
 import { useHotel } from '../../context/HotelContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   BedDouble,
@@ -17,8 +18,9 @@ import {
 
 export default function Sidebar() {
   const { activeTab, setActiveTab, attentionCount } = useHotel();
+  const { user } = useAuth();
 
-  const NAV_ITEMS = [
+  const ALL_NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'rooms', label: 'Rooms', icon: BedDouble },
     { id: 'tasks', label: 'Tasks', icon: ListTodo },
@@ -31,6 +33,17 @@ export default function Sidebar() {
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const role = user?.role?.toUpperCase();
+  const NAV_ITEMS = ALL_NAV_ITEMS.filter((item) => {
+    if (role === 'HOUSEKEEPING') {
+      return ['dashboard', 'housekeeping', 'tasks', 'issues', 'activity'].includes(item.id);
+    }
+    if (role === 'MAINTENANCE') {
+      return ['dashboard', 'maintenance', 'tasks', 'issues', 'activity'].includes(item.id);
+    }
+    return true; // MANAGER, SUPERVISOR, or any other role has full access
+  });
 
   return (
     <aside className="w-[240px] bg-white border-r border-[#dddddd] h-screen sticky top-0 flex flex-col justify-between p-4 flex-shrink-0 z-30 select-none">

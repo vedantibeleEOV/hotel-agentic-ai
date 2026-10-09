@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.agents.housekeeping_agent import HousekeepingAgent
 from app.agents.orchestrator_agent import OperationsOrchestratorAgent
 from app.agents.room_readiness_agent import RoomReadinessAgent
+from app.dependencies.auth import require_role
 from app.models.checkout_event import CheckoutEvent
 from app.models.enums import RoomStatus
 from app.database.seed import seed_db
@@ -19,6 +20,9 @@ housekeeping_agent = HousekeepingAgent(repository)
 @router.post(
     "/events/checkout",
     status_code=status.HTTP_202_ACCEPTED,
+    summary="Process Guest Checkout",
+    description="Trigger room checkout workflow. Accessible only to MANAGER and SUPERVISOR.",
+    dependencies=[Depends(require_role("MANAGER", "SUPERVISOR"))],
     responses={
         202: {
             "description": "Checkout event accepted and routed successfully.",
@@ -86,7 +90,12 @@ async def process_checkout_event(event: CheckoutEvent):
     }
 
 
-@router.post("/reset", summary="Reset PostgreSQL repository data and agent logs back to initial state")
+@router.post(
+    "/reset",
+    summary="Reset PostgreSQL repository data and agent logs back to initial state",
+    description="Reset database state and seed data back to initial state. Restricted to MANAGER only.",
+    dependencies=[Depends(require_role("MANAGER"))],
+)
 async def reset_system_state():
     """Reset repository data and agent activity logs to fresh initial state."""
     global repository, orchestrator, room_readiness_agent, housekeeping_agent

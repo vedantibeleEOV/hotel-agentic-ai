@@ -1,20 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, AlertCircle } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { X, Plus, AlertCircle, ShieldAlert, User } from 'lucide-react';
 import { hotelApi } from '../../api/hotelApi';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Report Issue Modal
- * Fetches real rooms and real staff from the backend API.
+ * Automatically uses the logged-in user as the reporter.
+ * Rendered with React createPortal directly into document.body for perfect viewport centering.
  */
 export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
+  const { user } = useAuth();
   const [rooms, setRooms] = useState([]);
-  const [staffList, setStaffList] = useState([]);
   const [roomId, setRoomId] = useState('');
-  const [staffId, setStaffId] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Lock body scroll while open and restore on close/unmount
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, submitting, onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -24,27 +51,44 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
       setLoading(true);
       setError(null);
       try {
-        const [roomsRes, staffRes] = await Promise.all([
-          hotelApi.getRooms(),
-          hotelApi.getStaff(),
-        ]);
-        if (mounted) {
-          const roomArr = Array.isArray(roomsRes) ? roomsRes : roomsRes.rooms || [];
-          setRooms(roomArr);
-          if (roomArr.length > 0 && !roomId) {
-            setRoomId(roomArr[0].id);
-          }
+        const isHousekeeping = (user?.role || '').toUpperCase() === 'HOUSEKEEPING';
 
-          const staffArr = Array.isArray(staffRes) ? staffRes : staffRes.staff || [];
-          setStaffList(staffArr);
-          if (staffArr.length > 0 && !staffId) {
-            setStaffId(staffArr[0].id);
+        if (isHousekeeping) {
+          // Fetch open tasks for this housekeeper
+          const [roomsRes, tasksRes] = await Promise.all([
+            hotelApi.getRooms(),
+            hotelApi.getTasks({ staff_id: user?.staff_id, status_group: 'open' }),
+          ]);
+
+          if (mounted) {
+            const allRooms = Array.isArray(roomsRes) ? roomsRes : roomsRes.rooms || [];
+            const staffTasks = Array.isArray(tasksRes) ? tasksRes : tasksRes.tasks || [];
+            const assignedRoomIds = new Set(staffTasks.map((t) => t.room_id));
+
+            const eligibleRooms = allRooms.filter((r) => assignedRoomIds.has(r.id));
+            setRooms(eligibleRooms);
+
+            if (eligibleRooms.length > 0) {
+              setRoomId(eligibleRooms[0].id);
+            } else {
+              setRoomId('');
+            }
+          }
+        } else {
+          // Manager, Supervisor, Maintenance can report for any room
+          const roomsRes = await hotelApi.getRooms();
+          if (mounted) {
+            const roomArr = Array.isArray(roomsRes) ? roomsRes : roomsRes.rooms || [];
+            setRooms(roomArr);
+            if (roomArr.length > 0) {
+              setRoomId(roomArr[0].id);
+            }
           }
         }
       } catch (err) {
         if (mounted) {
-          console.error('Failed to load rooms or staff:', err);
-          setError('Failed to load rooms or staff list');
+          console.error('Failed to load rooms:', err);
+          setError('Failed to load eligible rooms list');
         }
       } finally {
         if (mounted) setLoading(false);
@@ -56,9 +100,12 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
     return () => {
       mounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
+
+  const isHousekeeping = (user?.role || '').toUpperCase() === 'HOUSEKEEPING';
+  const hasNoEligibleRooms = isHousekeeping && rooms.length === 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -77,7 +124,6 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
     try {
       await hotelApi.reportMaintenanceIssue({
         room_id: parseInt(roomId, 10),
-        reported_by_staff_id: staffId ? parseInt(staffId, 10) : null,
         description: description.trim(),
       });
       setDescription('');
@@ -91,10 +137,39 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  return (
-    <div className="maint-modal-scrim" onClick={onClose}>
+  const modalContent = (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backdropFilter: 'blur(3px)',
+        WebkitBackdropFilter: 'blur(3px)',
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+        boxSizing: 'border-box',
+      }}
+      onClick={onClose}
+    >
       <div
-        className="maint-modal-card"
+        style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '540px',
+          maxHeight: '90vh',
+          boxShadow: '0 24px 48px rgba(0, 0, 0, 0.22)',
+          border: '1px solid #ebebeb',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          boxSizing: 'border-box',
+        }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -113,6 +188,14 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
 
         <form onSubmit={handleSubmit}>
           <div className="maint-modal-body">
+            {/* Reporter Profile Indicator */}
+            <div className="row g8 small p-2 rounded-xl bg-[#f7f7f7] border border-[#ebebeb]">
+              <User size={15} className="text-[#6a6a6a]" />
+              <span>
+                Reporting as: <b>{user?.name || 'Staff User'}</b> ({user?.role || 'Staff'})
+              </span>
+            </div>
+
             {error && (
               <div className="maint-error-banner">
                 <AlertCircle size={15} />
@@ -120,43 +203,32 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
               </div>
             )}
 
+            {hasNoEligibleRooms && !loading && (
+              <div className="alert warn small" style={{ marginTop: 4 }}>
+                <ShieldAlert size={16} />
+                <span>
+                  You do not have any open cleaning tasks assigned right now. Housekeeping attendants may only report issues for rooms currently assigned to them.
+                </span>
+              </div>
+            )}
+
             {/* Room Select */}
             <div className="maint-form-group">
               <label className="maint-form-label" htmlFor="maint-room-select">
-                Room
+                Room {isHousekeeping && '(Your Assigned Cleaning Tasks)'}
               </label>
               <select
                 id="maint-room-select"
                 className="maint-select"
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
-                disabled={loading || submitting}
+                disabled={loading || submitting || hasNoEligibleRooms}
                 required
               >
+                {rooms.length === 0 && <option value="">No eligible rooms found</option>}
                 {rooms.map((r) => (
                   <option key={r.id} value={r.id}>
                     Room {r.room_number} — {r.room_type || r.type || 'Standard'} (Floor {r.floor || '—'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Reported By Staff Select */}
-            <div className="maint-form-group">
-              <label className="maint-form-label" htmlFor="maint-staff-select">
-                Reported by
-              </label>
-              <select
-                id="maint-staff-select"
-                className="maint-select"
-                value={staffId}
-                onChange={(e) => setStaffId(e.target.value)}
-                disabled={loading || submitting}
-              >
-                {staffList.length === 0 && <option value="">No staff found</option>}
-                {staffList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.role})
                   </option>
                 ))}
               </select>
@@ -174,7 +246,7 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
                 placeholder="Describe what is broken or needed (e.g. AC unit is blowing warm air and making a loud rattling noise)..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                disabled={submitting}
+                disabled={submitting || hasNoEligibleRooms}
                 required
               />
             </div>
@@ -192,7 +264,7 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
             <button
               type="submit"
               className="maint-btn primary"
-              disabled={submitting || loading}
+              disabled={submitting || loading || hasNoEligibleRooms}
             >
               <Plus size={15} />
               <span>{submitting ? 'Submitting...' : 'Report Issue'}</span>
@@ -202,4 +274,6 @@ export default function ReportIssueModal({ isOpen, onClose, onSuccess }) {
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

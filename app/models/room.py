@@ -18,3 +18,4 @@ class Room(BaseModel):
     room_type: str = Field(min_length=1, max_length=50)
     status: RoomStatus
     open_issue_category: Optional[str] = None
+    current_reservation_id: Optional[int] = None

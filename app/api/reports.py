@@ -1,12 +1,13 @@
 import logging
 from typing import Optional
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
+from app.dependencies.auth import get_current_user
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 repository = PostgresHotelRepository()
 
 

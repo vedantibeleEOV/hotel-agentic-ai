@@ -4,7 +4,7 @@ import { useActivityLog } from '../../hooks/useActivityLog';
 import { useHotel } from '../../context/HotelContext';
 import '../../styles/activityLog.css';
 
-const KINDS = ['All', 'AI Agent', 'System', 'Staff', 'Supervisor'];
+const KINDS = ['All', 'AI Agent', 'System', 'Staff', 'Supervisor', 'Manager'];
 
 /**
  * Activity Log Page Component
@@ -59,9 +59,21 @@ export default function ActivityLogPage() {
   const getDotClass = (kind) => {
     const k = (kind || '').toLowerCase();
     if (k.includes('ai') || k.includes('agent')) return 'ai';
+    if (k.includes('manager')) return 'supervisor';
     if (k.includes('supervisor')) return 'supervisor';
-    if (k.includes('staff')) return 'staff';
+    if (k.includes('staff') || k.includes('housekeeping') || k.includes('maintenance')) return 'staff';
     return 'system';
+  };
+
+  const formatRoleLabel = (item) => {
+    const r = (item.kind || item.actor_role || '').toUpperCase();
+    if (r === 'MANAGER') return 'Manager';
+    if (r === 'SUPERVISOR') return 'Supervisor';
+    if (r === 'HOUSEKEEPING') return 'Housekeeping';
+    if (r === 'MAINTENANCE') return 'Maintenance';
+    if (r === 'AI AGENT' || r === 'AI' || r === 'AGENT') return 'AI Agent';
+    if (r === 'SYSTEM') return 'System';
+    return item.kind || item.actor_role || 'Staff';
   };
 
   return (
@@ -205,7 +217,7 @@ export default function ActivityLogPage() {
                           <span className="act-actor-name">{item.actor || 'System'}</span>
                           <span className="act-actor-tag">
                             <span className={`act-dot ${dotClass}`} />
-                            <span>{item.kind || item.actor_role || 'Staff'}</span>
+                            <span>{formatRoleLabel(item)}</span>
                           </span>
                         </div>
                       </td>

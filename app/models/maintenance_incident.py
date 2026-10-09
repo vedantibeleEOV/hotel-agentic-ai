@@ -16,7 +16,7 @@ from app.models.enums import IncidentStatus, MaintenanceCategory, MaintenanceSev
 class MaintenanceIncident(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     room_id: int
-    reported_by_staff_id: int
+    reported_by_staff_id: Optional[int] = None
     description: str
     category: MaintenanceCategory
     severity: MaintenanceSeverity

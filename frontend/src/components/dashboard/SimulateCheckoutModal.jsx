@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { LogOut, X, Loader2, AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { hotelApi } from '../../api/hotelApi';
 import CheckoutConfirmModal from '../../pages/rooms/CheckoutConfirmModal';
@@ -14,21 +15,58 @@ export default function SimulateCheckoutModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  // Lock body scroll while open and restore on close/unmount
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
+  // Close on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !submitting) {
+        if (confirmModalOpen) {
+          setConfirmModalOpen(false);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, confirmModalOpen, submitting, onClose]);
+
   if (!isOpen) return null;
 
   const handleSelectRoom = (room) => {
     setSelectedRoom(room);
+    setError(null);
     setConfirmModalOpen(true);
   };
 
   const handleConfirmCheckout = async () => {
     if (!selectedRoom) return;
+    const reservationId = selectedRoom.current_reservation_id || selectedRoom.reservation_id;
+    if (!reservationId) {
+      setError('No active reservation for this room');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       await hotelApi.processCheckout({
-        room_number: String(selectedRoom.room_number || selectedRoom.id),
-        guest_name: 'Guest Departure',
+        property_id: selectedRoom.property_id || 1,
+        room_id: selectedRoom.id,
+        reservation_id: reservationId,
+        checkout_time: new Date().toISOString(),
       });
       setConfirmModalOpen(false);
       onClose();
@@ -41,21 +79,18 @@ export default function SimulateCheckoutModal({
     }
   };
 
-  return (
+  const modalContent = (
     <>
       <div
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
+          inset: 0,
           width: '100vw',
           height: '100vh',
           backgroundColor: 'rgba(0, 0, 0, 0.45)',
           backdropFilter: 'blur(3px)',
           WebkitBackdropFilter: 'blur(3px)',
-          zIndex: 9998,
+          zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -70,11 +105,13 @@ export default function SimulateCheckoutModal({
             borderRadius: '16px',
             width: '100%',
             maxWidth: '500px',
+            maxHeight: '90vh',
             boxShadow: '0 24px 48px rgba(0, 0, 0, 0.22)',
             border: '1px solid #ebebeb',
-            overflow: 'hidden',
+            overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
+            boxSizing: 'border-box',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -216,4 +253,6 @@ export default function SimulateCheckoutModal({
       )}
     </>
   );
+
+  return createPortal(modalContent, document.body);
 }

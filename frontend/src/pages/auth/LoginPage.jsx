@@ -107,33 +107,35 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Quick Demo User Accounts */}
-        <div className="login-hint">
-          <span className="login-hint-title">Quick Select Test Accounts</span>
-          <div className="login-hint-chips">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('amit.shah')}
-              className="login-hint-chip"
-            >
-              amit.shah (Manager)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('priya.deshmukh')}
-              className="login-hint-chip"
-            >
-              priya.deshmukh (Housekeeping)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('vikram.rane')}
-              className="login-hint-chip"
-            >
-              vikram.rane (Maintenance)
-            </button>
+        {/* Quick Demo User Accounts (DEV mode only) */}
+        {import.meta.env.DEV && (
+          <div className="login-hint">
+            <span className="login-hint-title">Quick Select Test Accounts (Dev Only)</span>
+            <div className="login-hint-chips">
+              <button
+                type="button"
+                onClick={() => handleQuickFill('amit.shah')}
+                className="login-hint-chip"
+              >
+                amit.shah (Manager)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('priya.deshmukh')}
+                className="login-hint-chip"
+              >
+                priya.deshmukh (Housekeeping)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('vikram.rane')}
+                className="login-hint-chip"
+              >
+                vikram.rane (Maintenance)
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

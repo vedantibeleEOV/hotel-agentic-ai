@@ -66,8 +66,20 @@ export default function ActivityTimeline({ activity = [] }) {
         {sorted.map((ev, idx) => {
           const timeStr = formatClockTime(ev.timestamp);
           const dotColor = getDotColor(ev);
+          const formatRole = (role) => {
+            if (!role) return '';
+            const r = String(role).toUpperCase();
+            if (r === 'MANAGER') return 'Manager';
+            if (r === 'SUPERVISOR') return 'Supervisor';
+            if (r === 'HOUSEKEEPING') return 'Housekeeping';
+            if (r === 'MAINTENANCE') return 'Maintenance';
+            if (r === 'AI AGENT' || r === 'AI') return 'AI Agent';
+            if (r === 'SYSTEM') return 'System';
+            return role;
+          };
+          const formattedRole = formatRole(ev.actor_role);
           const actorInfo = ev.actor_name
-            ? `${ev.actor_name}${ev.actor_role ? ` (${ev.actor_role})` : ''}`
+            ? `${ev.actor_name}${formattedRole ? ` (${formattedRole})` : ''}`
             : 'System';
           const outcomeText = ev.outcome ? ` · ${ev.outcome}` : '';
 

@@ -5,11 +5,11 @@ const HotelContext = createContext(null);
 
 // Initial Mock Rooms Data (Matching Prototype & Database)
 const INITIAL_ROOMS = [
-  { id: 1, room_number: '405', floor: 4, room_type: 'DELUXE', status: 'OCCUPIED', priority_score: 95, is_vip: true, early_check_in: true, next_arrival: '13:00' },
-  { id: 2, room_number: '406', floor: 4, room_type: 'STANDARD', status: 'READY', priority_score: 10, is_vip: false, early_check_in: false, next_arrival: '16:00' },
-  { id: 3, room_number: '301', floor: 3, room_type: 'SUITE', status: 'DIRTY', priority_score: 85, is_vip: true, early_check_in: false, next_arrival: '14:30' },
-  { id: 4, room_number: '302', floor: 3, room_type: 'STANDARD', status: 'CLEANING', priority_score: 50, is_vip: false, early_check_in: true, next_arrival: '15:00' },
-  { id: 5, room_number: '401', floor: 4, room_type: 'DELUXE', status: 'MAINTENANCE', priority_score: 90, is_vip: false, early_check_in: false, next_arrival: '18:00' },
+  { id: 1, room_number: '405', floor: 4, room_type: 'DELUXE', status: 'OCCUPIED', priority_score: 95, is_vip: true, early_check_in: true, next_arrival: '13:00', current_reservation_id: 5006, property_id: 1 },
+  { id: 2, room_number: '406', floor: 4, room_type: 'STANDARD', status: 'READY', priority_score: 10, is_vip: false, early_check_in: false, next_arrival: '16:00', current_reservation_id: null, property_id: 1 },
+  { id: 3, room_number: '101', floor: 1, room_type: 'STANDARD', status: 'OCCUPIED', priority_score: 85, is_vip: false, early_check_in: false, next_arrival: '14:30', current_reservation_id: 5001, property_id: 1 },
+  { id: 4, room_number: '302', floor: 3, room_type: 'STANDARD', status: 'CLEANING', priority_score: 50, is_vip: false, early_check_in: true, next_arrival: '15:00', current_reservation_id: null, property_id: 1 },
+  { id: 5, room_number: '401', floor: 4, room_type: 'DELUXE', status: 'OCCUPIED', priority_score: 90, is_vip: false, early_check_in: false, next_arrival: '18:00', current_reservation_id: 5004, property_id: 1 },
 ];
 
 // Initial Staff Data
@@ -114,14 +114,19 @@ export const HotelProvider = ({ children }) => {
   // Actions
   const triggerCheckout = async (roomId = 1) => {
     const room = rooms.find((r) => r.id === roomId) || rooms[0];
+    if (!room) return;
+    const reservationId = room.current_reservation_id || room.reservation_id;
     addTrace('OPERATIONS_ORCHESTRATOR', 'GUEST_CHECKED_OUT', `Checkout received for Room ${room.room_number}`, 'ROUTED', { roomId, propertyId: 1 });
 
     try {
       if (isOnline) {
+        if (!reservationId) {
+          throw new Error(`No active reservation found for Room ${room.room_number}`);
+        }
         const res = await hotelApi.processCheckout({
-          property_id: 1,
+          property_id: room.property_id || 1,
           room_id: room.id,
-          reservation_id: 5001,
+          reservation_id: reservationId,
           checkout_time: new Date().toISOString(),
         });
         
@@ -183,9 +188,10 @@ export const HotelProvider = ({ children }) => {
       if (isOnline) {
         await hotelApi.resetSystem();
         await refreshData();
+      } else {
+        setRooms(INITIAL_ROOMS);
+        setStaff(INITIAL_STAFF);
       }
-      setRooms(INITIAL_ROOMS);
-      setStaff(INITIAL_STAFF);
       addTrace('SYSTEM', 'RESET_STATE', 'System state successfully reset', 'COMPLETED');
     } catch (err) {
       addTrace('ERROR', 'RESET_FAILED', err.message, 'FAILED');

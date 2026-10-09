@@ -13,7 +13,9 @@ from app.models.enums import MaintenanceCategory, MaintenanceSeverity
 
 class MaintenanceIssueReport(BaseModel):
     room_id: int = Field(gt=0)
-    reported_by_staff_id: int = Field(gt=0)
+    reported_by_staff_id: Optional[int] = None
+    reporter_name: Optional[str] = None
+    reporter_role: Optional[str] = None
     description: str = Field(min_length=5, max_length=500)
     category: Optional[MaintenanceCategory] = None
     severity: Optional[MaintenanceSeverity] = None

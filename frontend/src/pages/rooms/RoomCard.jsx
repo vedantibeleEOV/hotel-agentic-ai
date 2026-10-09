@@ -102,13 +102,13 @@ export default function RoomCard({ room, onClick, onCheckout }) {
           )}
         </div>
 
-        {/* Checkout Action Button for Occupied Rooms */}
-        {isOccupied && (
+        {/* Checkout Action Button for Occupied Rooms (Manager / Supervisor) */}
+        {isOccupied && Boolean(onCheckout) && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onCheckout?.(room);
+              onCheckout(room);
             }}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#fde9e5] text-[#ff385c] hover:bg-[#ff385c] hover:text-white active:scale-95 transition-all text-[11px] font-semibold cursor-pointer border border-[#f8bbb0] shadow-2xs ml-auto"
             title={`Check out Room ${room.room_number || room.id}`}

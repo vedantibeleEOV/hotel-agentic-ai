@@ -20,8 +20,24 @@ export default function TopBar() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [forbiddenToast, setForbiddenToast] = useState(null);
   const [now, setNow] = useState(new Date());
   const userMenuRef = useRef(null);
+
+  const role = user?.role?.toUpperCase();
+  const canSimulate = role === 'MANAGER' || role === 'SUPERVISOR';
+  const canResetDb = role === 'MANAGER';
+
+  // Listen to 403 Forbidden events dispatched by API client
+  useEffect(() => {
+    function handleForbidden(e) {
+      const msg = e.detail?.message || 'You do not have permission for this action.';
+      setForbiddenToast(msg);
+      setTimeout(() => setForbiddenToast(null), 5000);
+    }
+    window.addEventListener('voyage_forbidden', handleForbidden);
+    return () => window.removeEventListener('voyage_forbidden', handleForbidden);
+  }, []);
 
   // Close user dropdown when clicking outside
   useEffect(() => {
@@ -44,7 +60,6 @@ export default function TopBar() {
   const timeStr = now.toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dateStr = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-
   const handleReset = async () => {
     setIsResetting(true);
     try {
@@ -66,6 +81,14 @@ export default function TopBar() {
 
   return (
     <header className="h-16 bg-white border-b border-[#dddddd] px-6 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
+      {/* Forbidden 403 Toast Alert */}
+      {forbiddenToast && (
+        <div className="fixed top-5 right-6 z-50 flex items-center gap-2.5 px-4 py-3 bg-rose-600 text-white rounded-xl shadow-xl border border-white/20 animate-slide-down">
+          <AlertTriangle size={18} className="flex-shrink-0 text-white" />
+          <span className="text-xs font-semibold">{forbiddenToast}</span>
+        </div>
+      )}
+
       {/* Left: Hotel Property Selector Dropdown */}
       <div className="flex items-center gap-3">
         <button className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-[#dddddd] hover:bg-[#f7f7f7] transition-all text-left group">
@@ -106,18 +129,20 @@ export default function TopBar() {
           <div className="text-[11px] text-[#6a6a6a] font-medium mt-0.5">{dateStr}</div>
         </div>
 
-        {/* Simulation Flask Button */}
-        <button
-          onClick={() => setSimulationActive(!simulationActive)}
-          title={simulationActive ? 'Stop Simulation' : 'Start Simulation'}
-          className={`p-2 rounded-xl border transition-all ${
-            simulationActive
-              ? 'bg-rose-50 border-[#ff385c] text-[#ff385c]'
-              : 'bg-white border-[#dddddd] text-[#6a6a6a] hover:bg-[#f7f7f7] hover:text-[#222222]'
-          }`}
-        >
-          <FlaskConical size={18} />
-        </button>
+        {/* Simulation Flask Button (Manager and Supervisor only) */}
+        {canSimulate && (
+          <button
+            onClick={() => setSimulationActive(!simulationActive)}
+            title={simulationActive ? 'Stop Simulation' : 'Start Simulation'}
+            className={`p-2 rounded-xl border transition-all ${
+              simulationActive
+                ? 'bg-rose-50 border-[#ff385c] text-[#ff385c]'
+                : 'bg-white border-[#dddddd] text-[#6a6a6a] hover:bg-[#f7f7f7] hover:text-[#222222]'
+            }`}
+          >
+            <FlaskConical size={18} />
+          </button>
+        )}
 
         {/* Notification Bell Button */}
         <button
@@ -127,15 +152,17 @@ export default function TopBar() {
           <Bell size={18} />
         </button>
 
-        {/* Reset DB Button (Testing Only) */}
-        <button
-          onClick={() => setShowResetConfirm(true)}
-          title="Reset database (Testing only)"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-semibold transition-all shadow-2xs"
-        >
-          <RotateCcw size={14} className={isResetting ? 'animate-spin' : ''} />
-          <span>Reset DB</span>
-        </button>
+        {/* Reset DB Button (Manager Only) */}
+        {canResetDb && (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            title="Reset database (Manager only)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+          >
+            <RotateCcw size={14} className={isResetting ? 'animate-spin' : ''} />
+            <span>Reset DB</span>
+          </button>
+        )}
 
         {/* User Profile Pill & Dropdown Menu */}
         <div className="relative pl-2 border-l border-[#ebebeb]" ref={userMenuRef}>

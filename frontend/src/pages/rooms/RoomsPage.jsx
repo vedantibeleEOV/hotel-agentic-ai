@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRooms } from '../../hooks/useRooms';
 import { useHotel } from '../../context/HotelContext';
+import { useAuth } from '../../context/AuthContext';
 import { hotelApi } from '../../api/hotelApi';
 import StatusChips from './StatusChips';
 import RoomFilters from './RoomFilters';
@@ -12,6 +13,10 @@ import { Search, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function RoomsPage() {
   const { refreshData } = useHotel();
+  const { user } = useAuth();
+
+  const role = user?.role?.toUpperCase();
+  const canCheckout = role === 'MANAGER' || role === 'SUPERVISOR';
 
   // Filter & view state
   const [view, setView] = useState('grid');
@@ -58,6 +63,12 @@ export default function RoomsPage() {
 
   const handleConfirmCheckout = async () => {
     if (!checkoutRoom || checkoutLoading) return;
+    const reservationId = checkoutRoom.current_reservation_id || checkoutRoom.reservation_id;
+    if (!reservationId) {
+      setCheckoutError('No active reservation for this room');
+      return;
+    }
+
     setCheckoutLoading(true);
     setCheckoutError(null);
 
@@ -65,7 +76,7 @@ export default function RoomsPage() {
       const payload = {
         property_id: checkoutRoom.property_id || 1,
         room_id: checkoutRoom.id,
-        reservation_id: checkoutRoom.reservation_id || 5001,
+        reservation_id: reservationId,
         checkout_time: new Date().toISOString(),
       };
 
@@ -267,13 +278,13 @@ export default function RoomsPage() {
               <RoomsGrid
                 rooms={filteredRooms}
                 summary={summary}
-                onCheckout={handleOpenCheckout}
+                onCheckout={canCheckout ? handleOpenCheckout : null}
               />
             ) : (
               <RoomsTable
                 rooms={filteredRooms}
                 summary={summary}
-                onCheckout={handleOpenCheckout}
+                onCheckout={canCheckout ? handleOpenCheckout : null}
               />
             )}
           </div>

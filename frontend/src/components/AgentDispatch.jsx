@@ -5,7 +5,7 @@ export default function AgentDispatch({ onCheckout, onMaintenance, isSubmitting 
   // Checkout Form state
   const [checkoutData, setCheckoutData] = useState({
     property_id: 1,
-    reservation_id: 5001,
+    reservation_id: '',
     room_id: 1,
     guest_id: 101,
     checkout_time: new Date().toISOString(),

@@ -1,11 +1,11 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.models.enums import RoomStatus
+from app.dependencies.auth import get_current_user
 from app.models.room import Room
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 repository = PostgresHotelRepository()
 
 

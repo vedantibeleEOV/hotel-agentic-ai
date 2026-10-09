@@ -148,12 +148,12 @@ export default function RoomsTable({ rooms, summary, onRoomClick, onCheckout }) 
 
                         {/* Action Column */}
                         <td className="py-3 px-3.5 text-right">
-                          {isOccupied ? (
+                          {isOccupied && Boolean(onCheckout) ? (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onCheckout?.(room);
+                                onCheckout(room);
                               }}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#fde9e5] text-[#ff385c] hover:bg-[#ff385c] hover:text-white active:scale-95 transition-all text-xs font-semibold cursor-pointer border border-[#f8bbb0] shadow-2xs"
                               title={`Check out Room ${room.room_number || room.id}`}

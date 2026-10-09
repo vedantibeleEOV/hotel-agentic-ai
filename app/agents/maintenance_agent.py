@@ -110,6 +110,11 @@ class MaintenanceAgent:
         skill_names = CATEGORY_SKILLS_MAPPING.get(cat_key.upper(), ["GENERAL"])
         return [MaintenanceSkill(s) for s in skill_names]
 
+    def _get_required_skill(self, category: MaintenanceCategory) -> MaintenanceSkill:
+        skills = self._get_qualifying_skills(category)
+        specialist = [s for s in skills if s != MaintenanceSkill.GENERAL]
+        return specialist[0] if specialist else MaintenanceSkill.GENERAL
+
     def _select_best_technician(
         self,
         candidates: list[Staff],
@@ -144,15 +149,18 @@ class MaintenanceAgent:
         if not room:
             raise ValueError("Room not found")
 
-        # 2. Look up reporting staff member
-        reporting_staff = self.repository.staff.get(issue.reported_by_staff_id)
-        if not reporting_staff:
-            raise ValueError("Reporting staff not found")
-
-        # 3. Check staff role
-        allowed_roles = (StaffRole.HOUSEKEEPING, StaffRole.MAINTENANCE)
-        if reporting_staff.role not in allowed_roles:
-            raise ValueError("Only hotel staff (housekeeping or maintenance) can report maintenance issues")
+        # 2. Look up reporting staff member (if staff_id provided)
+        reporting_staff = None
+        if issue.reported_by_staff_id is not None:
+            if hasattr(self.repository, "get_staff_by_id"):
+                reporting_staff = self.repository.get_staff_by_id(issue.reported_by_staff_id)
+            elif hasattr(self.repository, "staff"):
+                reporting_staff = self.repository.staff.get(issue.reported_by_staff_id)
+            if not reporting_staff:
+                raise ValueError("Reporting staff not found")
+            allowed_roles = (StaffRole.HOUSEKEEPING, StaffRole.MAINTENANCE, "SUPERVISOR", "MANAGER")
+            if str(reporting_staff.role).upper() not in [str(r).upper() for r in allowed_roles]:
+                raise ValueError("Only hotel staff, supervisors or managers can report maintenance issues")
 
         # 4. Check room current status
         valid_statuses = (
@@ -356,7 +364,12 @@ class MaintenanceAgent:
             if hasattr(self.repository, "log_activity"):
                 cat_val = issue.category.value if hasattr(issue.category, "value") else str(issue.category)
                 sev_val = issue.severity.value if hasattr(issue.severity, "value") else str(issue.severity)
-                rep_role = reporting_staff.role.value if hasattr(reporting_staff.role, "value") else str(reporting_staff.role)
+                if reporting_staff:
+                    actor_name = reporting_staff.name
+                    rep_role = reporting_staff.role.value if hasattr(reporting_staff.role, "value") else str(reporting_staff.role)
+                else:
+                    actor_name = getattr(issue, "reporter_name", None) or "Amit Shah"
+                    rep_role = getattr(issue, "reporter_role", None) or "MANAGER"
 
                 # 1. Issue reported
                 self.repository.log_activity(
@@ -364,7 +377,7 @@ class MaintenanceAgent:
                     room_id=issue.room_id,
                     event_type="ISSUE_REPORTED",
                     title="Issue reported",
-                    actor_name=reporting_staff.name,
+                    actor_name=actor_name,
                     actor_role=rep_role,
                     action=f"Reported issue in Room {room.room_number}",
                     outcome=f'"{issue.description}"',

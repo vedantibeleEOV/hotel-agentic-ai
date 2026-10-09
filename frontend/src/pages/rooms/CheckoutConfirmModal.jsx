@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { LogOut, X, Loader2, AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 
 /**
  * Checkout Confirm Modal Component (Checkout Ticket)
- * Perfectly centered in the middle of the viewport with clean Voyage Ops styling.
+ * Rendered directly into document.body using React Portal for perfect screen centering.
  */
 export default function CheckoutConfirmModal({
   room,
@@ -13,12 +14,26 @@ export default function CheckoutConfirmModal({
   loading = false,
   error = null,
 }) {
-  if (!isOpen || !room) return null;
+  const roomNumber = room?.room_number || room?.id;
+  const reservationId = room?.current_reservation_id || room?.reservation_id;
+  const hasActiveReservation = Boolean(reservationId);
 
-  const roomNumber = room.room_number || room.id;
+  // Lock body scroll while open and restore on close/unmount
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
 
   // Close on Escape key press
   useEffect(() => {
+    if (!isOpen) return;
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && !loading) {
         onClose();
@@ -26,22 +41,21 @@ export default function CheckoutConfirmModal({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, loading]);
+  }, [isOpen, onClose, loading]);
 
-  return (
+  if (!isOpen || !room) return null;
+
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        inset: 0,
         width: '100vw',
         height: '100vh',
         backgroundColor: 'rgba(0, 0, 0, 0.45)',
         backdropFilter: 'blur(3px)',
         WebkitBackdropFilter: 'blur(3px)',
-        zIndex: 9999,
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -58,9 +72,10 @@ export default function CheckoutConfirmModal({
           borderRadius: '16px',
           width: '100%',
           maxWidth: '480px',
+          maxHeight: '90vh',
           boxShadow: '0 24px 48px rgba(0, 0, 0, 0.22)',
           border: '1px solid #ebebeb',
-          overflow: 'hidden',
+          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
           boxSizing: 'border-box',
@@ -197,6 +212,35 @@ export default function CheckoutConfirmModal({
                 <Sparkles size={12} style={{ color: '#6366f1' }} /> Housekeeping Cleaning Task
               </span>
             </div>
+
+            {/* Active Reservation Display / Warning */}
+            {hasActiveReservation ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px', borderTop: '1px dashed #e8e8ed' }}>
+                <span style={{ color: '#6a6a6a' }}>Reservation ID:</span>
+                <span style={{ fontWeight: 700, color: '#222222', fontFamily: 'monospace' }}>
+                  #{reservationId}
+                </span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginTop: '4px',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  backgroundColor: '#fffbeb',
+                  border: '1px solid #fef3c7',
+                  color: '#92400e',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <AlertCircle size={15} style={{ color: '#d97706', flexShrink: 0 }} />
+                <span>No active reservation for this room</span>
+              </div>
+            )}
           </div>
 
           {/* Error Alert */}
@@ -255,7 +299,7 @@ export default function CheckoutConfirmModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || !hasActiveReservation}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -267,9 +311,9 @@ export default function CheckoutConfirmModal({
               color: '#ffffff',
               backgroundColor: '#ff385c',
               border: 'none',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.75 : 1,
-              boxShadow: '0 2px 6px rgba(255, 56, 92, 0.3)',
+              cursor: loading || !hasActiveReservation ? 'not-allowed' : 'pointer',
+              opacity: loading || !hasActiveReservation ? 0.5 : 1,
+              boxShadow: hasActiveReservation ? '0 2px 6px rgba(255, 56, 92, 0.3)' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
@@ -289,5 +333,7 @@ export default function CheckoutConfirmModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

@@ -94,7 +94,11 @@ class PostgresHotelRepository:
 
 
     @staticmethod
-    def _to_pydantic_room(entity: RoomEntity, open_issue_category: Optional[str] = None) -> Room:
+    def _to_pydantic_room(
+        entity: RoomEntity,
+        open_issue_category: Optional[str] = None,
+        current_reservation_id: Optional[int] = None,
+    ) -> Room:
         return Room(
             id=entity.id,
             property_id=entity.property_id,
@@ -103,6 +107,7 @@ class PostgresHotelRepository:
             room_type=entity.room_type or "",
             status=RoomStatus(entity.status) if entity.status else RoomStatus.DIRTY,
             open_issue_category=open_issue_category,
+            current_reservation_id=current_reservation_id,
         )
 
     @staticmethod
@@ -209,7 +214,39 @@ class PostgresHotelRepository:
                 if r_id not in open_cat_by_room and cat:
                     open_cat_by_room[r_id] = cat
 
-            return [self._to_pydantic_room(e, open_issue_category=open_cat_by_room.get(e.id)) for e in entities]
+            # Query active/checked-in reservations for occupied rooms
+            now_utc = datetime.now(timezone.utc)
+            res_stmt = (
+                select(ReservationEntity)
+                .order_by(ReservationEntity.check_out_time.desc(), ReservationEntity.id.desc())
+            )
+            all_reservations = session.execute(res_stmt).scalars().all()
+            res_by_room = {}
+            for r in all_reservations:
+                res_by_room.setdefault(r.room_id, []).append(r)
+
+            active_res_by_room = {}
+            for r_id, r_list in res_by_room.items():
+                match = next(
+                    (
+                        res.id
+                        for res in r_list
+                        if res.check_in_time
+                        and res.check_out_time
+                        and (res.check_in_time <= now_utc <= res.check_out_time)
+                    ),
+                    None,
+                )
+                active_res_by_room[r_id] = match or (r_list[0].id if r_list else None)
+
+            return [
+                self._to_pydantic_room(
+                    e,
+                    open_issue_category=open_cat_by_room.get(e.id),
+                    current_reservation_id=active_res_by_room.get(e.id) if (e.status == "OCCUPIED") else None,
+                )
+                for e in entities
+            ]
 
     def get_rooms_summary(self) -> dict:
         """Calculate total, status counts, and floor counts using SQL aggregation."""
@@ -271,7 +308,29 @@ class PostgresHotelRepository:
                 .order_by(MaintenanceIncidentEntity.created_at.desc())
             )
             open_cat = session.scalar(inc_stmt)
-            return self._to_pydantic_room(entity, open_issue_category=open_cat)
+            curr_res_id = None
+            if entity.status == "OCCUPIED":
+                now_utc = datetime.now(timezone.utc)
+                res_stmt = (
+                    select(ReservationEntity)
+                    .where(ReservationEntity.room_id == room_id)
+                    .order_by(ReservationEntity.check_out_time.desc(), ReservationEntity.id.desc())
+                )
+                room_reservations = session.execute(res_stmt).scalars().all()
+                if room_reservations:
+                    match = next(
+                        (
+                            res.id
+                            for res in room_reservations
+                            if res.check_in_time
+                            and res.check_out_time
+                            and (res.check_in_time <= now_utc <= res.check_out_time)
+                        ),
+                        None,
+                    )
+                    curr_res_id = match or room_reservations[0].id
+
+            return self._to_pydantic_room(entity, open_issue_category=open_cat, current_reservation_id=curr_res_id)
 
     def get_guest_by_id(self, guest_id: int) -> Optional[Guest]:
         """Read a guest from PostgreSQL by ID and return Pydantic Guest model."""
@@ -1592,9 +1651,9 @@ class PostgresHotelRepository:
                 name_upper = (e.actor_name or "").upper()
                 if "AI" in role_upper or "AGENT" in role_upper or "AI" in name_upper or "AGENT" in name_upper:
                     kind_val = "AI Agent"
-                elif "SUPERVISOR" in role_upper:
-                    kind_val = "Supervisor"
                 elif "MANAGER" in role_upper:
+                    kind_val = "Manager"
+                elif "SUPERVISOR" in role_upper:
                     kind_val = "Supervisor"
                 elif "SYSTEM" in role_upper:
                     kind_val = "System"
@@ -2936,8 +2995,8 @@ class PostgresHotelRepository:
                     "category_label": cat_label,
                     "reported_by": {
                         "id": reporter_ent.id if reporter_ent else inc_ent.reported_by_staff_id,
-                        "name": reporter_ent.name if reporter_ent else f"Staff #{inc_ent.reported_by_staff_id}",
-                        "role": reporter_ent.role if reporter_ent else "HOUSEKEEPING",
+                        "name": reporter_ent.name if reporter_ent else (f"Staff #{inc_ent.reported_by_staff_id}" if inc_ent.reported_by_staff_id else "Amit Shah"),
+                        "role": reporter_ent.role if reporter_ent else ("HOUSEKEEPING" if inc_ent.reported_by_staff_id else "MANAGER"),
                     },
                     "reported_at": created_iso,
                     "guest_in_room": guest_in_room,
@@ -3738,13 +3797,40 @@ class PostgresHotelRepository:
             recent_acts = self.get_all_activities(limit=10)
 
             # 9. Occupied Rooms List (for checkout modal)
+            now_utc = datetime.now(timezone.utc)
+            res_stmt = (
+                select(ReservationEntity)
+                .order_by(ReservationEntity.check_out_time.desc(), ReservationEntity.id.desc())
+            )
+            all_reservations = session.execute(res_stmt).scalars().all()
+            res_by_room = {}
+            for r_res in all_reservations:
+                res_by_room.setdefault(r_res.room_id, []).append(r_res)
+
+            active_res_by_room = {}
+            for r_id, r_list in res_by_room.items():
+                match = next(
+                    (
+                        res.id
+                        for res in r_list
+                        if res.check_in_time
+                        and res.check_out_time
+                        and (res.check_in_time <= now_utc <= res.check_out_time)
+                    ),
+                    None,
+                )
+                active_res_by_room[r_id] = match or (r_list[0].id if r_list else None)
+
             occupied_rooms = [
                 {
                     "id": r.id,
+                    "property_id": r.property_id or 1,
                     "room_number": r.room_number,
                     "floor": r.floor,
                     "room_type": r.room_type or "Deluxe",
                     "status": "OCCUPIED",
+                    "current_reservation_id": active_res_by_room.get(r.id),
+                    "reservation_id": active_res_by_room.get(r.id),
                 }
                 for r in rooms
                 if (r.status or "").upper() == "OCCUPIED"

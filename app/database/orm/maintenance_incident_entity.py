@@ -12,7 +12,7 @@ class MaintenanceIncidentEntity(Base):
 
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
-    reported_by_staff_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
+    reported_by_staff_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     description = Column(Text, nullable=False)
     category = Column(String(50), nullable=False)
     severity = Column(String(50), nullable=False)

@@ -97,11 +97,13 @@ export function useRooms(filters = {}) {
 
         return {
           id: r.id || roomNumStr,
+          property_id: r.property_id || 1,
           room_number: roomNumStr,
           floor: floorNum,
           room_type: formattedType,
           status: formattedStatus,
           raw_status: r.status,
+          current_reservation_id: r.current_reservation_id ?? null,
           guest: extra.guest,
           vip: r.is_vip || extra.vip || false,
           arrival: extra.arrival,

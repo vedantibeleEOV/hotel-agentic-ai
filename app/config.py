@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Current User Configuration for Human Overrides
     CURRENT_USER_NAME: str = "Amit Shah"
-    CURRENT_USER_ROLE: str = "Hotel Manager"
+    CURRENT_USER_ROLE: str = "MANAGER"
 
     # Maintenance Operations Targets & Settings
     TARGET_RESOLUTION_MINUTES: int = 45  # assumption: target resolution duration for maintenance operations in minutes

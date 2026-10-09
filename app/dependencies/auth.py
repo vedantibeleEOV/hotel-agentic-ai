@@ -79,6 +79,7 @@ def get_current_user(
             "role": user.role,
             "staff_id": user.staff_id,
             "name": display_name,
+            "full_name": display_name,
             "is_active": user.is_active,
         }
 

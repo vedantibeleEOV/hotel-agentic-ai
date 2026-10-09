@@ -1,10 +1,11 @@
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
+from app.dependencies.auth import get_current_user
 from app.models.staff import Staff
 from app.repositories.postgres_hotel_repository import PostgresHotelRepository
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 repository = PostgresHotelRepository()
 
 
